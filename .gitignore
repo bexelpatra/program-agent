@@ -1,0 +1,27 @@
+# 프로젝트별 생성물 (프레임워크가 아닌 실제 작업 결과물)
+src/
+tests/
+logs/
+archive/
+requirements.txt
+run_collector.sh
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
