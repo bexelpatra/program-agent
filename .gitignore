@@ -1,10 +1,8 @@
-# 프로젝트별 생성물 (프레임워크가 아닌 실제 작업 결과물)
-src/
-tests/
+# 런타임 생성물
 logs/
+
+# 레거시 아카이브 (git 브랜치로 대체됨)
 archive/
-requirements.txt
-run_collector.sh
 
 # Python
 __pycache__/

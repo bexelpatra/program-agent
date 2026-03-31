@@ -70,3 +70,18 @@
 
 ```
 
+## 2026-03-25T08:13:44
+- command: `SRC=archive/2026-03-25-asset-tracker && \
+cp "$SRC/task-board.md" "$SRC/done-log.md" "$SRC/architecture.md" "$SRC/coder-report.md" "$SRC/tester-report.md" signal/ && \
+cp "$SRC"/coder-report-TASK-*.md "$SRC"/tester-report-TASK-*.md signal/ 2>/dev/null; \
+cp "$SRC/retrospective.md" signal/ 2>/dev/null; \
+cp -r "$SRC/src/" src/ && \
+cp -r "$SRC/tests/" tests/ && \
+cp "$SRC/requirements.txt" "$SRC/run_collector.sh" . && \
+mkdir -p logs && \
+echo "Restore complete" && ls src/ && echo "---" && python -m pytest tests/ -q 2>&1 | tail -3`
+- output:
+```
+
+```
+
