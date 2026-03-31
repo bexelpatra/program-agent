@@ -20,6 +20,20 @@
 
 > **중복 실행 방지**: 동일 세션(대화) 내에서 이미 세션 재개 프로토콜을 실행하고 상태를 파악한 경우, hook의 "세션 시작 감지" 알림이 반복되더라도 프로토콜을 다시 실행하지 않는다. 이미 진행 중인 작업 흐름을 유지하고, 사용자의 입력에 직접 응답한다.
 
+### 0. 브랜치 확인 (필수 — 가장 먼저)
+
+```bash
+git branch --show-current
+```
+
+- **`project/*` 브랜치**: 해당 프로젝트 작업 중. Step 1로 진행.
+- **`main` 브랜치**: 활성 프로젝트 없음. 아래 처리:
+  ```bash
+  git branch --list "project/*"
+  ```
+  - 프로젝트 브랜치가 있으면 목록을 사용자에게 보여주고 어떤 프로젝트를 이어할지 확인한다.
+  - 없으면 새 프로젝트이다. 사용자에게 요구사항을 요청한다.
+
 ### 1. 상태 파악 (필수)
 다음 파일들을 읽는다:
 1. `signal/task-board.md` — 전체 태스크 현황 확인
@@ -33,7 +47,6 @@
   - 작업이 완료되어 있으면 → DONE 처리 후 다음 태스크로
   - 작업이 미완성이면 → 상태를 TODO로 되돌리고 서브에이전트 재호출
 - **task-board가 비어있고 architecture.md에 설계가 있음**: 설계만 하고 중단된 것이다. 태스크 분해(Step 2)부터 재개한다.
-- **모든 signal 파일이 초기 상태**: 새 프로젝트이다. 사용자에게 요구사항을 요청한다.
 
 ### 3. 사용자 확인
 상태를 파악한 후 반드시 사용자에게 현재 상황을 요약하고 진행 방향을 확인받는다.
@@ -191,43 +204,68 @@ Agent tool 호출:
 
 ---
 
-## 프로젝트 아카이브 및 리셋
+## 프로젝트 관리 (Git 기반)
 
-사용자가 "새 프로젝트"를 요청하거나, 현재 프로젝트의 모든 태스크가 DONE인 상태에서 새로운 요구사항이 들어오면 아래 절차를 실행한다.
+프로젝트는 `project/*` git 브랜치로 관리한다. `main` 브랜치는 프레임워크(CLAUDE.md, agents/, hooks/, signal/ 빈 템플릿)만 유지한다.
 
-### 아카이브 절차
+### 새 프로젝트 시작
 
-사용자에게 아카이브 여부를 확인한 뒤 진행한다:
+사용자가 "새 프로젝트"를 요청하면:
 
-1. 프로젝트 이름을 결정한다 (사용자에게 확인 또는 architecture.md에서 추출).
-2. `archive/{날짜}-{프로젝트이름}/` 디렉토리를 생성한다.
-3. 다음을 아카이브 디렉토리로 **이동**한다:
-   - `signal/task-board.md`, `signal/done-log.md`, `signal/architecture.md`
-   - `signal/coder-report.md`, `signal/tester-report.md`
-   - `signal/coder-report-TASK-*.md`, `signal/tester-report-TASK-*.md` (있는 경우)
-   - `signal/execution-log.md` (있는 경우)
-   - `signal/retrospective.md` (있는 경우)
-   - `src/` 전체
-   - `tests/` 전체
-4. signal/ 파일들을 초기 상태로 재생성한다:
-   - `task-board.md` → 빈 테이블
-   - `done-log.md` → 빈 로그
-   - `architecture.md` → 빈 템플릿
-   - `coder-report.md`, `tester-report.md` → 초기 상태
-5. 사용자에게 아카이브 완료를 보고한다.
+1. **현재 작업 커밋** (미커밋 변경사항이 있는 경우):
+   ```bash
+   git add -A && git commit -m "project: {현재 프로젝트명} 작업 저장"
+   ```
+2. **중복 확인**: 같은 이름의 브랜치가 있는지 확인한다.
+   ```bash
+   git branch --list "project/{이름}"
+   ```
+3. **main으로 전환 후 새 브랜치 생성**:
+   ```bash
+   git checkout main
+   git checkout -b project/{프로젝트이름}
+   ```
+   - 브랜치명은 영소문자 + 하이픈, `signal/architecture.md`의 프로젝트 ID를 사용한다.
+   - `signal/` 파일들이 자동으로 빈 템플릿 상태로 시작된다.
+4. 오케스트레이션 루프 Step 1부터 진행한다.
 
-### 아카이브 확인 명령
+### 프로젝트 전환 (다른 프로젝트로)
 
-사용자가 아카이브 목록을 보고 싶을 때:
-- `archive/` 디렉토리의 하위 폴더를 나열한다.
-- 특정 아카이브의 상세를 보려면 해당 폴더의 `architecture.md`와 `done-log.md`를 읽는다.
+1. **전환 전 커밋** (반드시):
+   ```bash
+   git status  # 미커밋 변경 확인
+   git add -A && git commit -m "project: 작업 저장"
+   ```
+2. **브랜치 전환**:
+   ```bash
+   git checkout project/{이름}
+   ```
+3. 세션 재개 프로토콜 Step 1부터 실행한다.
 
-### 아카이브 복원
+### 프로젝트 목록 확인
 
-이전 프로젝트를 이어서 작업하고 싶을 때:
-1. 현재 작업이 있으면 먼저 아카이브한다.
-2. 대상 아카이브의 파일들을 원래 위치로 복원한다.
-3. 세션 재개 프로토콜을 실행한다.
+```bash
+git branch --list "project/*"
+```
+
+특정 프로젝트의 상세를 보려면 해당 브랜치로 전환하거나 아래 명령으로 직접 파일을 조회한다:
+```bash
+git show project/{이름}:signal/architecture.md
+git show project/{이름}:signal/done-log.md
+```
+
+### 태스크 완료마다 커밋
+
+태스크를 DONE 처리할 때마다 커밋하여 히스토리를 남긴다:
+```bash
+git add -A && git commit -m "TASK-{ID}: {태스크 제목}"
+```
+
+### 프레임워크 개선 정책
+
+- **프레임워크 변경** (CLAUDE.md, agents/\*.md, hooks/): `main` 브랜치에서 직접 수정 후 커밋한다.
+- **프로젝트 브랜치에 반영**: 필요 시 `git merge main`으로 동기화한다.
+- **프로젝트 브랜치에서 프레임워크를 수정한 경우**: 작업 완료 후 main에 cherry-pick하거나 직접 반영한다.
 
 ---
 
