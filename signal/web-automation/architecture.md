@@ -1,0 +1,122 @@
+# Architecture
+
+## 개요
+
+웹 업무 자동화 프레임워크. 사이트별 Workflow를 공통 Core Toolkit 위에 구현한다.
+
+### 대상 사이트
+1. **티스토리** - Naver 이메일 인증번호 로그인 → 글 작성 자동화
+2. **야놀자** - Cloudflare 우회 → 이메일 로그인 → 숙소 검색 → 예약 버튼 클릭 → 텔레그램 알림
+
+### 기술 스택
+- **언어**: Python 3.11+
+- **브라우저 자동화**: Playwright
+- **Anti-Bot**: playwright-stealth + 필요 시 capsolver API
+- **설정**: YAML (사이트별 설정 분리)
+- **알림**: 텔레그램 봇 (token + chat_id 설정)
+- **코드 주석**: 한국어
+
+### 스코프
+- 결제 제외 (예약 직전 단계까지)
+- 사용자에게 텔레그램 알림 → 사용자가 직접 결제
+
+---
+
+## 구조
+
+```
+projects/web-automation/
+├── requirements.txt
+├── config/
+│   ├── settings.yaml           # 공통 설정 (텔레그램, 브라우저 옵션)
+│   ├── tistory.yaml            # 티스토리 전용 설정
+│   └── yanolja.yaml            # 야놀자 전용 설정
+├── src/
+│   ├── __init__.py
+│   ├── core/                   # === Core Toolkit (공통) ===
+│   │   ├── __init__.py
+│   │   ├── browser.py          # Playwright 브라우저 엔진 (시작/종료/대기/스크린샷)
+│   │   ├── config.py           # YAML 설정 로더
+│   │   ├── telegram.py         # 텔레그램 알림 모듈
+│   │   ├── logger.py           # 로깅 + 단계별 스크린샷
+│   │   └── retry.py            # 재시도 + 에러 핸들링
+│   ├── auth/                   # === 인증 모듈 ===
+│   │   ├── __init__.py
+│   │   └── naver_imap.py       # Naver IMAP 인증번호 추출
+│   ├── antibot/                # === Anti-Bot 모듈 ===
+│   │   ├── __init__.py
+│   │   ├── stealth.py          # playwright-stealth 설정
+│   │   └── cloudflare.py       # Cloudflare 우회 (자체 시도 + capsolver fallback)
+│   ├── sites/                  # === 사이트별 Workflow ===
+│   │   ├── __init__.py
+│   │   ├── base.py             # BaseSiteWorkflow (공통 인터페이스)
+│   │   ├── tistory/
+│   │   │   ├── __init__.py
+│   │   │   ├── login.py        # 티스토리 로그인 (이메일 인증번호 방식)
+│   │   │   └── writer.py       # 글 작성 자동화
+│   │   └── yanolja/
+│   │       ├── __init__.py
+│   │       ├── login.py        # 야놀자 로그인
+│   │       ├── search.py       # 숙소 검색 (지역, 날짜, 조건)
+│   │       └── booking.py      # 예약 버튼 클릭 + 알림
+│   └── cli.py                  # CLI 진입점
+└── tests/
+    ├── __init__.py
+    ├── test_browser.py
+    ├── test_telegram.py
+    ├── test_naver_imap.py
+    ├── test_cloudflare.py
+    ├── test_tistory.py
+    └── test_yanolja.py
+```
+
+### 2계층 아키텍처
+
+```
+┌─────────────────────────────────────┐
+│       사이트별 Workflow              │  ← 사이트마다 다른 비즈니스 흐름
+│  (TistoryWorkflow, YanoljaWorkflow) │
+├─────────────────────────────────────┤
+│          Core Toolkit               │  ← 공통 도구 모음
+│  Browser, Config, Telegram,         │
+│  Logger, Screenshot, Retry          │
+└─────────────────────────────────────┘
+```
+
+---
+
+## 설계 결정
+
+### 1. Playwright 채택 (vs Selenium)
+- 결정: Playwright를 메인 브라우저 엔진으로 사용
+- 이유: Selenium보다 안정적, async 지원, anti-bot 대응 유리, 자동 대기(auto-wait) 내장
+- 대안: Selenium (생태계 넓지만 불안정), Puppeteer (Node.js 전용)
+
+### 2. 추상화 범위 제한
+- 결정: Core Toolkit(도구)만 공통화하고, 비즈니스 흐름(로그인/검색/예약)은 사이트별 구현
+- 이유: 티스토리(이메일 인증 + 글작성)와 야놀자(Cloudflare + 숙소 예약)의 흐름이 근본적으로 다름
+- 대안: 완전 추상화(비효율적, 억지 추상화)
+
+### 3. Cloudflare 대응 전략 (단계적)
+- 결정: 자체 우회 시도 → 실패 시 capsolver API
+- 이유: 무료 방법 우선 시도 후 유료 fallback
+- 방법:
+  1. playwright-stealth (fingerprint 위장)
+  2. undetected-playwright 또는 브라우저 프로필 재사용
+  3. capsolver API (유료, 최후 수단)
+
+### 4. 결제 제외
+- 결정: 1차 스코프에서 결제 기능 제외
+- 이유: 실제 금전 거래 위험, PG사 보안 복잡
+- 대안: 예약 버튼 클릭 후 텔레그램 알림 → 사용자가 직접 결제
+
+### 5. 설정 분리 (Config-driven)
+- 결정: 사이트별 YAML 설정 파일 분리
+- 이유: 셀렉터/URL 변경 시 코드 수정 없이 설정만 수정
+- 구조: settings.yaml(공통) + tistory.yaml + yanolja.yaml
+
+---
+
+## 현재 상태
+
+프로젝트 초기화 완료. 태스크 분해 진행 중.

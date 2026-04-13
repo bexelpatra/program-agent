@@ -5,6 +5,64 @@
 
 ---
 
+## 디렉토리 구조 (멀티프로젝트)
+
+```
+signal/
+├── registry.md                  # 프로젝트 목록 (Manager 전용)
+├── schema.md                    # 이 문서 (공용)
+└── {project-id}/                # 프로젝트별 네임스페이스
+    ├── task-board.md
+    ├── done-log.md
+    ├── architecture.md
+    ├── coder-report.md
+    ├── tester-report.md
+    ├── coder-report-TASK-*.md   # 병렬 실행 시
+    ├── tester-report-TASK-*.md  # 병렬 실행 시
+    └── retrospective.md         # 프로젝트 완료 시
+
+projects/
+└── {project-id}/                # 프로젝트별 코드 루트
+    ├── src/
+    ├── tests/
+    └── ...                      # 프로젝트별 구성 (docker-compose, requirements 등)
+```
+
+### 경로 규칙
+- 모든 시그널 파일 경로는 `signal/{project-id}/`로 시작한다.
+- 모든 프로젝트 코드 경로는 `projects/{project-id}/`로 시작한다.
+- Manager가 서브에이전트 호출 시 `PROJECT_ID`, `SIGNAL_DIR`, `PROJECT_ROOT` 를 명시한다.
+- 서브에이전트는 전달받은 경로만 사용한다.
+
+---
+
+## registry.md
+
+활성 프로젝트 목록을 관리한다. Manager만 수정한다.
+
+### 형식
+
+```markdown
+# Project Registry
+
+| ID | Name | Status | Git Branch | Created | Updated |
+|----|------|--------|------------|---------|---------|
+| my-project | 프로젝트 이름 | ACTIVE | project/my-project | 2026-01-01 | 2026-01-01 |
+```
+
+### Status 값
+- `ACTIVE` : 진행 중
+- `PAUSED` : 일시 중단 (다른 프로젝트 우선 처리 등)
+- `DONE` : 모든 태스크 완료, 아카이브 전
+- `ARCHIVED` : 아카이브 완료
+
+### 규칙
+- Manager만 수정한다.
+- 멀티 세션 환경에서 각 세션은 자기 프로젝트의 행만 수정한다.
+- 새 프로젝트 등록은 한 세션에서만 수행한다 (동시 추가 금지).
+
+---
+
 ## task-board.md
 
 전체 태스크 목록과 상태를 추적하는 중앙 보드. Manager만 수정한다.

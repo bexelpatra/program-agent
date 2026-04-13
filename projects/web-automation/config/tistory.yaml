@@ -1,0 +1,35 @@
+# 티스토리 자동화 설정
+# Naver 이메일 인증번호 로그인 → 글 작성 자동화
+
+# 사이트 기본 정보
+site:
+  name: "tistory"
+  base_url: "https://www.tistory.com"
+  login_url: "https://www.tistory.com/auth/login"
+
+# 계정 정보
+account:
+  email: "YOUR_EMAIL_HERE"             # Naver 이메일 주소
+  password: "YOUR_PASSWORD_HERE"       # Naver 이메일 비밀번호
+
+# Naver IMAP 설정 (인증번호 추출용)
+naver_imap:
+  server: "imap.naver.com"
+  port: 993
+  use_ssl: true
+
+# 블로그 설정
+blog:
+  blog_name: "YOUR_BLOG_NAME"         # 티스토리 블로그 이름
+  default_category: ""                 # 기본 카테고리 (빈 문자열이면 미분류)
+  default_visibility: "private"        # 기본 공개 설정 (public, private, protected)
+
+# 셀렉터 (사이트 UI 변경 시 여기만 수정)
+selectors:
+  login_email_input: ""                # 이메일 입력 필드 셀렉터
+  login_password_input: ""             # 비밀번호 입력 필드 셀렉터
+  login_submit_button: ""              # 로그인 버튼 셀렉터
+  auth_code_input: ""                  # 인증번호 입력 필드 셀렉터
+  write_title_input: ""                # 글 제목 입력 필드 셀렉터
+  write_content_area: ""               # 글 본문 영역 셀렉터
+  write_publish_button: ""             # 발행 버튼 셀렉터

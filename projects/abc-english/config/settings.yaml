@@ -1,0 +1,58 @@
+# ABC News Daily English Study - Configuration
+
+crawling:
+  base_url: "https://www.abc.net.au"
+  program_url: "https://www.abc.net.au/listen/programs/abc-news-daily"
+  request_delay: 1.0          # seconds between requests
+  request_timeout: 30         # seconds
+  user_agent: "ABCEnglishStudy/1.0"
+  max_retries: 3
+
+whisper:
+  model: "base"               # base | small | medium | large
+  language: "en"
+  device: "cpu"               # cpu | cuda
+  output_format: "json"       # json with timestamps
+
+elasticsearch:
+  host: "localhost"
+  port: 9200
+  scheme: "http"
+  indices:
+    episodes: "abc-episodes"
+    sentences: "abc-sentences"
+    vocabulary: "abc-vocabulary"
+    expressions: "abc-expressions"
+  bulk_size: 500
+
+llm:
+  provider: "anthropic"       # anthropic | ollama
+  anthropic:
+    model: "claude-3-haiku-20240307"
+    max_tokens: 4096
+    batch_size: 10            # sentences per batch
+  ollama:
+    model: "llama3"
+    base_url: "http://localhost:11434"
+    batch_size: 5
+
+data:
+  audio_dir: "data/audio"
+  transcript_dir: "data/transcripts"
+
+spacy:
+  model: "en_core_web_sm"
+  filter_pos:
+    - "DET"       # determiners (a, an, the)
+    - "PRON"      # pronouns
+    - "ADP"       # prepositions
+    - "CCONJ"     # coordinating conjunctions
+    - "SCONJ"     # subordinating conjunctions
+    - "AUX"       # auxiliary verbs
+    - "PUNCT"     # punctuation
+    - "SPACE"     # whitespace
+    - "SYM"       # symbols
+    - "NUM"       # numbers
+    - "PART"      # particles (e.g., 's, n't) - but keep phrasal verb particles for LLM
+  filter_ner:
+    - "PERSON"    # personal names

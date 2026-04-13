@@ -1,0 +1,18 @@
+# 웹 자동화 프레임워크 의존성
+# Python 3.11+ 필수
+
+# 브라우저 자동화
+playwright>=1.40.0
+playwright-stealth>=1.0.6
+
+# 설정 관리
+pyyaml>=6.0.1
+
+# HTTP 요청 (텔레그램 API 등)
+requests>=2.31.0
+
+# CLI 인터페이스
+click>=8.1.7
+
+# Anti-Bot (Cloudflare 우회 fallback)
+# capsolver-python>=0.1.0  # 필요 시 주석 해제

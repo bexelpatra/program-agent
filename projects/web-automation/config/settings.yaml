@@ -1,0 +1,35 @@
+# 공통 설정 파일
+# 텔레그램 봇, 브라우저 옵션 등 전역 설정을 관리한다.
+
+# 텔레그램 알림 설정
+telegram:
+  bot_token: "YOUR_BOT_TOKEN_HERE"    # BotFather에서 발급받은 토큰
+  chat_id: "YOUR_CHAT_ID_HERE"        # 알림을 받을 채팅 ID
+  enabled: true                        # 알림 활성화 여부
+
+# 브라우저 설정
+browser:
+  headless: false                      # 헤드리스 모드 (디버깅 시 false 권장)
+  slow_mo: 100                         # 동작 간 지연 시간 (밀리초)
+  timeout: 30000                       # 기본 타임아웃 (밀리초)
+  viewport:
+    width: 1280
+    height: 720
+  user_agent: ""                       # 빈 문자열이면 기본값 사용
+
+# 스크린샷 설정
+screenshot:
+  enabled: true                        # 단계별 스크린샷 저장 여부
+  directory: "screenshots"             # 스크린샷 저장 디렉토리 (프로젝트 루트 기준)
+
+# 재시도 설정
+retry:
+  max_attempts: 3                      # 최대 재시도 횟수
+  delay: 2                             # 재시도 간 대기 시간 (초)
+  backoff_factor: 2                    # 지수 백오프 배수
+
+# 로깅 설정
+logging:
+  level: "INFO"                        # 로그 레벨 (DEBUG, INFO, WARNING, ERROR)
+  file: "logs/automation.log"          # 로그 파일 경로
+  console: true                        # 콘솔 출력 여부

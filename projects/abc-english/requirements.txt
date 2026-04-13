@@ -1,0 +1,28 @@
+# Crawling
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Speech-to-Text
+openai-whisper>=20231117
+
+# NLP
+spacy>=3.7.0
+
+# Elasticsearch
+elasticsearch>=8.13.0
+
+# LLM
+anthropic>=0.25.0
+
+# Configuration
+pyyaml>=6.0.1
+
+# CLI
+click>=8.1.0
+tqdm>=4.66.0
+
+# Transcript comparison
+jiwer>=3.0.0
+
+# Data validation
+pydantic>=2.6.0
