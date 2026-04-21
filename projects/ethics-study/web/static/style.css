@@ -1,0 +1,1000 @@
+/* ==============================
+   Ethics Study Guide — style.css
+   ============================== */
+
+/* ── CSS Variables ── */
+:root {
+  --color-bg: #f8f9fa;
+  --color-surface: #ffffff;
+  --color-primary: #3b5998;
+  --color-primary-dark: #2c4275;
+  --color-text: #1a1a2e;
+  --color-text-muted: #6c757d;
+  --color-border: #dee2e6;
+  --color-badge-western: #e3ecff;
+  --color-badge-eastern: #e6f4ea;
+  --color-badge-political: #fff3e0;
+  --radius: 10px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.14);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+}
+
+/* ── Reset & Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 18px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.75;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── Layout Helpers ── */
+.container {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* ── Header ── */
+.site-header {
+  background: var(--color-primary);
+  color: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.site-logo {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  color: #fff;
+}
+
+/* ── Search Form ── */
+.search-form {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-input {
+  flex: 1;
+  padding: 0.55rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  font-family: var(--font-sans);
+  outline: none;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+.search-input::placeholder {
+  color: rgba(255,255,255,0.65);
+}
+
+.search-input:focus {
+  background: rgba(255,255,255,0.25);
+}
+
+.search-btn {
+  padding: 0.5rem 1.1rem;
+  border: 1.5px solid rgba(255,255,255,0.6);
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: background 0.15s;
+}
+
+.search-btn:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* ── Main Content ── */
+.main-content {
+  flex: 1;
+  padding-top: 2rem;
+  padding-bottom: 3rem;
+}
+
+/* ── Page Hero ── */
+.page-hero {
+  margin-bottom: 1.5rem;
+}
+
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.page-subtitle {
+  color: var(--color-text-muted);
+  margin-top: 0.3rem;
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  background: transparent;
+  font-size: 0.95rem;
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  border-radius: 4px 4px 0 0;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--color-primary);
+}
+
+.tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* ── Card Grid ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.1rem;
+}
+
+/* ── Thinker Card ── */
+.thinker-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.15rem 1.2rem 1rem;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.18s, transform 0.18s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.thinker-card:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-3px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.1rem;
+}
+
+.card-field-badge {
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.22rem 0.6rem;
+  border-radius: 20px;
+  letter-spacing: 0.2px;
+}
+
+.thinker-card[data-field="western_ethics"] .card-field-badge {
+  background: var(--color-badge-western);
+  color: #2c4275;
+}
+
+.thinker-card[data-field="eastern_ethics"] .card-field-badge {
+  background: var(--color-badge-eastern);
+  color: #1b5e20;
+}
+
+.thinker-card[data-field="political_philosophy"] .card-field-badge {
+  background: var(--color-badge-political);
+  color: #bf360c;
+}
+
+.card-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.card-name-en {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-top: -0.15rem;
+}
+
+.card-era {
+  font-size: 0.85rem;
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.card-summary {
+  font-size: 0.92rem;
+  color: #444;
+  line-height: 1.65;
+  margin-top: 0.25rem;
+  flex: 1;
+}
+
+/* ── Keyword Tags ── */
+.card-keywords {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+}
+
+.kw-tag {
+  font-size: 0.78rem;
+  background: #f0f0f5;
+  color: #555;
+  padding: 0.22rem 0.6rem;
+  border-radius: 20px;
+  border: 1px solid #e0e0e8;
+}
+
+/* ── No Result Message ── */
+.no-result {
+  text-align: center;
+  color: var(--color-text-muted);
+  margin-top: 2rem;
+  font-size: 1rem;
+}
+
+/* ── Placeholder Pages ── */
+.placeholder-page {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2.5rem;
+  max-width: 600px;
+  margin: 2rem auto;
+  box-shadow: var(--shadow);
+}
+
+.placeholder-page h1 {
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.placeholder-page p {
+  margin-bottom: 0.5rem;
+  color: var(--color-text-muted);
+}
+
+.btn-back {
+  display: inline-block;
+  margin-top: 1.25rem;
+  padding: 0.5rem 1.1rem;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: background 0.15s;
+}
+
+.btn-back:hover {
+  background: var(--color-primary-dark);
+}
+
+/* ── Footer ── */
+.site-footer {
+  background: #2c2c3a;
+  color: rgba(255,255,255,0.55);
+  text-align: center;
+  padding: 1rem 0;
+  font-size: 0.82rem;
+}
+
+/* ==============================
+   Detail Page — Thinker
+   ============================== */
+
+/* ── Hero / Header ── */
+.thinker-hero {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.75rem 2rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.btn-back-small {
+  display: inline-block;
+  font-size: 0.82rem;
+  color: var(--color-primary);
+  margin-bottom: 0.6rem;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+.btn-back-small:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.thinker-name {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 0.2rem;
+}
+
+.thinker-name-en {
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.6rem;
+}
+
+.thinker-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.meta-badge {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  border: 1px solid transparent;
+}
+
+.meta-era {
+  background: #f0f0f5;
+  color: #444;
+  border-color: #ddd;
+}
+
+.meta-years {
+  background: #f5f5f5;
+  color: var(--color-text-muted);
+  border-color: #e0e0e0;
+  font-weight: 400;
+}
+
+.meta-field.field-western_ethics {
+  background: var(--color-badge-western);
+  color: #2c4275;
+}
+
+.meta-field.field-eastern_ethics {
+  background: var(--color-badge-eastern);
+  color: #1b5e20;
+}
+
+.meta-field.field-political_philosophy {
+  background: var(--color-badge-political);
+  color: #bf360c;
+}
+
+/* ── Detail Sections ── */
+.detail-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.section-count {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.subsection-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prose-block {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #333;
+  white-space: pre-line;
+}
+
+.core-philosophy {
+  background: #f8f9ff;
+  border-left: 4px solid var(--color-primary);
+  padding: 1rem 1.25rem;
+  border-radius: 0 6px 6px 0;
+}
+
+/* ── Collapsible ── */
+.collapsible {
+  border: none;
+}
+
+.collapsible-summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.collapsible-summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-summary::before {
+  content: "▶";
+  font-size: 0.7rem;
+  color: var(--color-primary);
+  transition: transform 0.2s;
+}
+
+details[open] .collapsible-summary::before {
+  transform: rotate(90deg);
+}
+
+.collapsible-body {
+  margin-top: 1rem;
+}
+
+/* ── Works ── */
+.works-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.work-card {
+  background: #f9f9fc;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.9rem 1.1rem;
+}
+
+.work-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.work-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.work-year {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.work-original {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-bottom: 0.3rem;
+}
+
+.work-significance {
+  font-size: 0.92rem;
+  color: #444;
+  line-height: 1.6;
+}
+
+/* ── Claims ── */
+.claims-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.claim-card {
+  background: #fafafa;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+}
+
+.claim-header {
+  margin-bottom: 0.6rem;
+}
+
+.claim-text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.claim-source {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  margin-top: 0.2rem;
+}
+
+/* ── Original text quote block ── */
+.claim-quote {
+  background: #f0f4ff;
+  border-left: 4px solid var(--color-primary);
+  border-radius: 0 6px 6px 0;
+  padding: 0.75rem 1rem;
+  margin: 0.6rem 0;
+  font-style: italic;
+  font-size: 0.9rem;
+  color: #333;
+  line-height: 1.65;
+}
+
+.claim-explanation {
+  font-size: 0.94rem;
+  color: #444;
+  line-height: 1.7;
+  margin: 0.4rem 0;
+}
+
+.claim-context {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  margin: 0.25rem 0;
+}
+
+/* ── Argument / Counterpoint ── */
+.claim-arg-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.claim-argument,
+.claim-counterpoint {
+  border-radius: 6px;
+  padding: 0.75rem 0.95rem;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.claim-argument {
+  background: #e8f5e9;
+  border: 1px solid #c8e6c9;
+  color: #1b5e20;
+}
+
+.claim-counterpoint {
+  background: #fce8e8;
+  border: 1px solid #f5c6c6;
+  color: #7f1d1d;
+}
+
+.arg-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.3rem;
+  opacity: 0.75;
+}
+
+/* ── Keywords Dictionary ── */
+.keywords-dict {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.85rem;
+}
+
+.keyword-entry {
+  background: #f9f9fc;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+
+.keyword-entry-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.keyword-term {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.keyword-term-en {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.keyword-definition {
+  font-size: 0.92rem;
+  color: #444;
+  line-height: 1.65;
+}
+
+.keyword-related {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ── Relations ── */
+.relations-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+.relations-col-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 0.75rem;
+}
+
+.relation-item {
+  background: #f5f7ff;
+  border: 1px solid #dde4f5;
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.6rem;
+}
+
+.relation-link {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.relation-link:hover {
+  color: var(--color-primary-dark);
+}
+
+.relation-type {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: #e3ecff;
+  color: #2c4275;
+  border-radius: 20px;
+  padding: 0.15rem 0.5rem;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+
+.relation-desc {
+  font-size: 0.82rem;
+  color: #555;
+  margin-top: 0.3rem;
+  line-height: 1.45;
+}
+
+/* ── No data message ── */
+.no-data-msg {
+  text-align: center;
+  color: var(--color-text-muted);
+  margin: 2rem 0;
+  font-size: 0.95rem;
+}
+
+/* ── Search Results ── */
+
+.search-query-text {
+  color: var(--color-primary);
+}
+
+.search-empty-state {
+  text-align: center;
+  padding: 4rem 1rem;
+  color: var(--color-text-muted);
+}
+
+.search-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.search-empty-state h2 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.5rem;
+}
+
+.search-empty-state p {
+  margin-bottom: 0.4rem;
+}
+
+.search-empty-examples {
+  font-size: 0.9rem;
+}
+
+.search-empty-examples code {
+  background: #f0f0f5;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.section-heading {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 1.75rem 0 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-badge,
+.result-type-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.18rem 0.55rem;
+  border-radius: 20px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+}
+
+.badge-claim {
+  background: #e3ecff;
+  color: #2c4275;
+}
+
+.badge-keyword {
+  background: #e6f4ea;
+  color: #1b5e20;
+}
+
+.badge-work {
+  background: #fff3e0;
+  color: #bf360c;
+}
+
+.tab-count {
+  display: inline-block;
+  background: rgba(0,0,0,0.08);
+  border-radius: 10px;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.45rem;
+  margin-left: 0.2rem;
+  font-weight: 600;
+}
+
+.tab-btn.active .tab-count {
+  background: rgba(59, 89, 152, 0.15);
+}
+
+.search-result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.search-result-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  box-shadow: var(--shadow);
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.search-result-card:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-2px);
+}
+
+.result-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+
+.result-thinker-link {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.result-thinker-link:hover {
+  text-decoration: underline;
+}
+
+.result-source {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.result-claim-text {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--color-text);
+  margin-bottom: 0.4rem;
+}
+
+.result-explanation,
+.result-definition {
+  font-size: 0.92rem;
+  color: #444;
+  line-height: 1.7;
+  margin-bottom: 0.4rem;
+}
+
+.result-term {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.result-term-en {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.result-work-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.result-keywords {
+  margin-top: 0.5rem;
+}
+
+mark {
+  background: #fff59d;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.1rem;
+}
+
+.search-tabs {
+  margin-bottom: 0.5rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .header-inner {
+    gap: 0.75rem;
+  }
+
+  .site-logo {
+    font-size: 1rem;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-title {
+    font-size: 1.4rem;
+  }
+
+  .tabs {
+    gap: 0.2rem;
+  }
+
+  .tab-btn {
+    font-size: 0.82rem;
+    padding: 0.45rem 0.8rem;
+  }
+
+  /* Detail page responsive */
+  .thinker-name {
+    font-size: 1.5rem;
+  }
+
+  .detail-section {
+    padding: 1rem 1.1rem;
+  }
+
+  .thinker-hero {
+    padding: 1.25rem 1.1rem 1rem;
+  }
+
+  .claim-arg-row {
+    grid-template-columns: 1fr;
+  }
+
+  .relations-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .keywords-dict {
+    grid-template-columns: 1fr;
+  }
+}

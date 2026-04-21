@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}사상가 목록 — 윤리 학습 가이드{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+  <h1 class="page-title">사상가 목록</h1>
+  <p class="page-subtitle">총 <strong>{{ total }}</strong>명의 사상가</p>
+</section>
+
+<!-- 분야별 탭 -->
+<nav class="tabs" id="field-tabs">
+  <button class="tab-btn active" data-field="all">전체 ({{ total }})</button>
+  {% for field_key, field_label in field_labels.items() %}
+  {% set count = groups.get(field_key, [])|length %}
+  {% if count > 0 %}
+  <button class="tab-btn" data-field="{{ field_key }}">
+    {{ field_label }} ({{ count }})
+  </button>
+  {% endif %}
+  {% endfor %}
+</nav>
+
+<!-- 사상가 카드 그리드 -->
+<div class="card-grid" id="thinker-grid">
+  {% for thinker in thinkers %}
+  <a
+    href="/thinker/{{ thinker.id }}"
+    class="thinker-card"
+    data-field="{{ thinker.field }}"
+  >
+    <div class="card-header">
+      <span class="card-field-badge">{{ thinker.field_label }}</span>
+    </div>
+    <h2 class="card-name">{{ thinker.name }}</h2>
+    {% if thinker.name_en %}
+    <p class="card-name-en">{{ thinker.name_en }}</p>
+    {% endif %}
+    <p class="card-era">{{ thinker.era }}{% if thinker.birth_year %} ({{ thinker.birth_year }}{% if thinker.death_year %}–{{ thinker.death_year }}{% endif %}){% endif %}</p>
+    {% if thinker.core_philosophy_short %}
+    <p class="card-summary">{{ thinker.core_philosophy_short }}</p>
+    {% endif %}
+    {% if thinker.keywords %}
+    <ul class="card-keywords">
+      {% for kw in thinker.keywords[:5] %}
+      <li class="kw-tag">{{ kw }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+<p class="no-result hidden" id="no-result">해당 분야의 사상가가 없습니다.</p>
+{% endblock %}

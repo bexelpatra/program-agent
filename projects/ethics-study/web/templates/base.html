@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}윤리 임용시험 학습 가이드{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="/" class="site-logo">
+        📚 윤리 학습 가이드
+      </a>
+      <form class="search-form" action="/search" method="get">
+        <input
+          type="search"
+          name="q"
+          class="search-input"
+          placeholder="사상가, 개념, 키워드 검색…"
+          value="{{ request.query_params.get('q', '') if request else '' }}"
+        />
+        <button type="submit" class="search-btn">검색</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="main-content container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <p>윤리 임용시험 학습 가이드 &mdash; Elasticsearch 기반</p>
+    </div>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block title %}{{ thinker.name }} — 윤리 학습 가이드{% endblock %}
+
+{% block content %}
+<div class="thinker-detail">
+
+  {# ── 상단 헤더 영역 ── #}
+  <div class="thinker-hero">
+    <div class="thinker-hero-inner">
+      <div class="thinker-hero-left">
+        <a href="/" class="btn-back-small">← 목록</a>
+        <h1 class="thinker-name">{{ thinker.name }}</h1>
+        {% if thinker.name_en %}
+          <p class="thinker-name-en">{{ thinker.name_en }}</p>
+        {% endif %}
+        <div class="thinker-meta">
+          {% if thinker.era %}
+            <span class="meta-badge meta-era">{{ thinker.era }}</span>
+          {% endif %}
+          {% if thinker.field_label %}
+            <span class="meta-badge meta-field field-{{ thinker.field }}">{{ thinker.field_label }}</span>
+          {% endif %}
+          {% if thinker.birth_year or thinker.death_year %}
+            <span class="meta-badge meta-years">
+              {{ thinker.birth_year if thinker.birth_year else '?' }}
+              —
+              {{ thinker.death_year if thinker.death_year else '현재' }}
+            </span>
+          {% endif %}
+        </div>
+        {% if thinker.keywords %}
+          <ul class="card-keywords" style="margin-top:0.75rem;">
+            {% for kw in thinker.keywords %}
+              <li class="kw-tag">{{ kw }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── 배경 / 사상 형성 ── #}
+  {% if thinker.background or thinker.philosophical_journey %}
+  <section class="detail-section">
+    <details class="collapsible" {% if not thinker.core_philosophy %}open{% endif %}>
+      <summary class="section-title collapsible-summary">배경 및 사상 형성</summary>
+      <div class="collapsible-body">
+        {% if thinker.background %}
+          <div class="prose-block">
+            <h3 class="subsection-title">생애 배경</h3>
+            <p>{{ thinker.background }}</p>
+          </div>
+        {% endif %}
+        {% if thinker.philosophical_journey %}
+          <div class="prose-block" style="margin-top:1rem;">
+            <h3 class="subsection-title">철학적 여정</h3>
+            <p>{{ thinker.philosophical_journey }}</p>
+          </div>
+        {% endif %}
+      </div>
+    </details>
+  </section>
+  {% endif %}
+
+  {# ── 핵심 사상 ── #}
+  {% if thinker.core_philosophy %}
+  <section class="detail-section">
+    <h2 class="section-title">핵심 사상</h2>
+    <div class="prose-block core-philosophy">
+      {{ thinker.core_philosophy }}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── 저작 목록 ── #}
+  {% if works %}
+  <section class="detail-section">
+    <h2 class="section-title">저작 목록 <span class="section-count">({{ works|length }})</span></h2>
+    <div class="works-list">
+      {% for work in works %}
+      <div class="work-card">
+        <div class="work-card-header">
+          <span class="work-title">{{ work.title }}</span>
+          {% if work.year %}
+            <span class="work-year">{{ work.year }}</span>
+          {% endif %}
+        </div>
+        {% if work.title_original %}
+          <p class="work-original">원제: {{ work.title_original }}</p>
+        {% endif %}
+        {% if work.significance %}
+          <p class="work-significance">{{ work.significance }}</p>
+        {% endif %}
+        {% if work.key_concepts %}
+          <ul class="card-keywords" style="margin-top:0.5rem;">
+            {% for concept in work.key_concepts %}
+              <li class="kw-tag">{{ concept }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── 주요 주장 ── #}
+  {% if claims %}
+  <section class="detail-section">
+    <h2 class="section-title">주요 주장 <span class="section-count">({{ claims|length }})</span></h2>
+    <div class="claims-list">
+      {% for claim in claims %}
+      <div class="claim-card">
+        {# 주장 헤더 #}
+        <div class="claim-header">
+          <p class="claim-text">{{ claim.claim }}</p>
+          {% if claim.source_detail %}
+            <span class="claim-source">출처: {{ claim.source_detail }}</span>
+          {% endif %}
+        </div>
+
+        {# 원문 인용 #}
+        {% if claim.original_text %}
+        <blockquote class="claim-quote">
+          <p>{{ claim.original_text }}</p>
+        </blockquote>
+        {% endif %}
+
+        {# 설명 #}
+        {% if claim.explanation %}
+        <p class="claim-explanation">{{ claim.explanation }}</p>
+        {% endif %}
+
+        {# 컨텍스트 #}
+        {% if claim.context %}
+        <p class="claim-context">맥락: {{ claim.context }}</p>
+        {% endif %}
+
+        {# 논거 / 반론 #}
+        <div class="claim-arg-row">
+          {% if claim.argument %}
+          <div class="claim-argument">
+            <span class="arg-label">논거</span>
+            <p>{{ claim.argument }}</p>
+          </div>
+          {% endif %}
+          {% if claim.counterpoint %}
+          <div class="claim-counterpoint">
+            <span class="arg-label">반론</span>
+            <p>{{ claim.counterpoint }}</p>
+          </div>
+          {% endif %}
+        </div>
+
+        {# 키워드 #}
+        {% if claim.keywords %}
+          <ul class="card-keywords" style="margin-top:0.5rem;">
+            {% for kw in claim.keywords %}
+              <li class="kw-tag">{{ kw }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── 키워드 사전 ── #}
+  {% if keywords %}
+  <section class="detail-section">
+    <h2 class="section-title">키워드 사전 <span class="section-count">({{ keywords|length }})</span></h2>
+    <div class="keywords-dict">
+      {% for kw in keywords %}
+      <div class="keyword-entry">
+        <div class="keyword-entry-header">
+          <span class="keyword-term">{{ kw.term }}</span>
+          {% if kw.term_en %}
+            <span class="keyword-term-en">{{ kw.term_en }}</span>
+          {% endif %}
+        </div>
+        {% if kw.definition %}
+          <p class="keyword-definition">{{ kw.definition }}</p>
+        {% endif %}
+        {% if kw.related_terms %}
+          <p class="keyword-related">
+            관련 용어:
+            {% for rt in kw.related_terms %}
+              <span class="kw-tag">{{ rt }}</span>
+            {% endfor %}
+          </p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── 관계 ── #}
+  {% if relations %}
+  <section class="detail-section">
+    <h2 class="section-title">관계 <span class="section-count">({{ relations|length }})</span></h2>
+    <div class="relations-grid">
+      {% set outgoing = relations | selectattr('direction', 'equalto', 'outgoing') | list %}
+      {% set incoming = relations | selectattr('direction', 'equalto', 'incoming') | list %}
+
+      {% if outgoing %}
+      <div class="relations-col">
+        <h3 class="relations-col-title">영향을 준 사상가</h3>
+        {% for rel in outgoing %}
+        <div class="relation-item">
+          {% if rel.to_thinker_exists %}
+            <a href="/thinker/{{ rel.to_thinker }}" class="relation-link">
+              {{ rel.to_thinker_name }}
+            </a>
+          {% else %}
+            <span class="relation-link relation-link-unregistered">{{ rel.to_thinker_name }}</span>
+          {% endif %}
+          {% if rel.type_label %}
+            <span class="relation-type">{{ rel.type_label }}</span>
+          {% endif %}
+          {% if rel.description %}
+            <p class="relation-desc">{{ rel.description }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if incoming %}
+      <div class="relations-col">
+        <h3 class="relations-col-title">영향을 받은 사상가</h3>
+        {% for rel in incoming %}
+        <div class="relation-item">
+          {% if rel.from_thinker_exists %}
+            <a href="/thinker/{{ rel.from_thinker }}" class="relation-link">
+              {{ rel.from_thinker_name }}
+            </a>
+          {% else %}
+            <span class="relation-link relation-link-unregistered">{{ rel.from_thinker_name }}</span>
+          {% endif %}
+          {% if rel.type_label %}
+            <span class="relation-type">{{ rel.type_label }}</span>
+          {% endif %}
+          {% if rel.description %}
+            <p class="relation-desc">{{ rel.description }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ── 데이터 없음 ── #}
+  {% if not works and not claims and not keywords and not relations %}
+  <div class="no-data-msg">
+    <p>아직 등록된 세부 데이터(저작, 주장, 키워드, 관계)가 없습니다.</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
