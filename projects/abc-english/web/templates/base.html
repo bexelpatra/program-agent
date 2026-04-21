@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}ABC English{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css" />
+  {% block head %}{% endblock %}
+</head>
+<body{% block body_attrs %}{% endblock %}>
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="nav-logo" href="/">ABC English</a>
+      <ul class="nav-menu">
+        <li>
+          <a href="/"
+             class="nav-link{% if active_nav == 'episodes' %} active{% endif %}"
+             data-nav="episodes">에피소드</a>
+        </li>
+        <li>
+          <a href="/notebook"
+             class="nav-link{% if active_nav == 'notebook' %} active{% endif %}"
+             data-nav="notebook">단어장</a>
+        </li>
+      </ul>
+      <div class="nav-actions">
+        {% block nav_actions %}{% endblock %}
+      </div>
+    </div>
+  </nav>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <script type="module" src="/static/js/common.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

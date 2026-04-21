@@ -99,6 +99,24 @@ def load_sentences(
         settings = load_settings()
 
     index_name = get_index_name("sentences", settings)
+
+    # Purge any previously-loaded sentences for these episodes so that a
+    # finer-grained run doesn't leave stale higher-index docs behind (the
+    # ID is {episode_id}_{sentence_index}, so re-loading with fewer
+    # sentences would orphan the tail).
+    episode_ids = sorted({s.episode_id for s in sentences})
+    if episode_ids:
+        es = get_client(settings=settings)
+        try:
+            es.delete_by_query(
+                index=index_name,
+                query={"terms": {"episode_id": episode_ids}},
+                refresh=True,
+                conflicts="proceed",
+            )
+        except Exception as exc:
+            logger.warning("delete_by_query for sentences failed: %s", exc)
+
     actions = [
         {
             "_index": index_name,

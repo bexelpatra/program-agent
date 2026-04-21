@@ -154,3 +154,57 @@
 - title: 통합 테스트 이슈 수정
 - assignee: coder
 - summary: TASK-026 테스트에서 이슈 없음. 수정 불필요.
+
+### TASK-029 (DONE) - 2026-04-14T00:10
+- title: 스케줄러 구현 (평일 새 에피소드 자동 감지 + 파이프라인 실행)
+- assignee: coder
+- summary: APScheduler BlockingScheduler + CronTrigger(day_of_week=mon-fri) 기반. data/transcripts/*_official.json 집합 ↔ collector.fetch_episode_list() 차집합으로 신규 감지. subprocess로 `python -m src.cli run-all` 호출. 주말 이중 가드, 예외 swallow, RotatingFileHandler 로그. CLI `schedule` 명령(--once, --time) 추가.
+- report: signal/abc-english/coder-report-TASK-029.md
+
+### TASK-030 (DONE) - 2026-04-14T00:35
+- title: ES 신규 인덱스 2개 (abc-user-vocabulary, abc-llm-cache) + Pydantic 모델
+- assignee: coder
+- summary: UserVocabularyEntry/LlmCacheEntry/SourceEpisodeRef 모델 + INDEX_MAPPINGS에 2개 추가. notebook_store.py (upsert/mark_viewed/list/delete, source_episodes max 20, painless script), llm_cache.py (sha1 cache_key, get/set) 신규. settings.yaml indices 2개 추가. init-indices로 6개 인덱스 생성 확인.
+- report: signal/abc-english/coder-report-TASK-030.md
+
+### TASK-031 (DONE) - 2026-04-14T00:45
+- title: Ollama 클라이언트 (영어교사 프롬프트, 캐시 연동, idiom 어원 필수, JSON 파싱)
+- assignee: coder
+- summary: ollama_client.py (async lookup_term / lookup_term_sync / verify_ollama_model + LookupResult). 캐시 우선 → /api/generate(format=json) → idiom etymology 누락 시 1회 재질의 → miss도 cache 저장. 프롬프트 v1(system+user_template) settings에서 override 가능. config에 llm.ollama.host/timeout_seconds/prompt_version/prompts.v1 추가. requirements에 httpx 추가.
+- report: signal/abc-english/coder-report-TASK-031.md
+
+### TASK-032 (DONE) - 2026-04-14T01:00
+- title: FastAPI 백엔드 (episodes/audio-Range/lookup/notebook API)
+- assignee: coder
+- summary: web/ 하위 FastAPI 앱 (app.py create_app 팩토리, deps.py, api/{episodes,audio,lookup,notebook}.py). /api/audio는 Range 지원 (200/206/416 + path traversal 방어). /api/notebook POST는 ollama lookup + notebook upsert 연동. startup에서 verify_ollama_model 경고 로그. requirements에 fastapi/uvicorn/jinja2 추가.
+- report: signal/abc-english/coder-report-TASK-032.md
+
+### TASK-033 (DONE) - 2026-04-14T01:20
+- title: Frontend 공용 (base template, 네비, common.js, CSS)
+- assignee: coder
+- summary: Jinja2 templates + /static 마운트. HTML 페이지 라우트 3종 (/, /study/{id}, /notebook) web/routes/pages.py. base.html + 스텁 3종 (episodes/study/notebook). 다크모드 기본 CSS. ESM common.js (api/toast/fmtDate/fmtDuration/initNav/setupDrawer). TemplateResponse 신규 시그니처 사용.
+- report: signal/abc-english/coder-report-TASK-033.md
+
+### TASK-034 (DONE) - 2026-04-14T01:45
+- title: Frontend 학습 페이지
+- assignee: coder
+- summary: episodes.js (카드 렌더, 제목 검색), study.js (플레이어 + 자막 싱크 + 드래그/클릭 lookup + 드로어). 배속 0.5-2x, 스킵 3s 기본(1-30 설정, localStorage), 키보드 Space/←/→/↑/↓. 자막 싱크 currentIdx 캐시+인접 확인+이진탐색 fallback. 토글 3종 localStorage 영속. 1-6단어 드래그 선택시 lookup 모달. 드로어 N 토글/ESC. node --check syntax OK, uvicorn HTTP 200 확인.
+- report: signal/abc-english/coder-report-TASK-034.md
+
+### TASK-035 (DONE) - 2026-04-14T02:00
+- title: Frontend 단어장 전용 페이지 (필터/정렬, 출처 에피소드 점프)
+- assignee: coder
+- summary: notebook.html 툴바(q/term_type/sort) + #notebook-list. notebook.js (ESM): loadList, 펼치기 시 viewed PATCH 자동, confirm 삭제, source 링크 /study/{id}#s={idx}. study.js 최소 패치: data-sentence-index 속성 + handleHashJump 핸들러(hash-flash 1.5s 애니메이션). CSS etymology 보라 좌측 보더, 빈 상태, hash-flash keyframe.
+- report: signal/abc-english/coder-report-TASK-035.md
+
+### TASK-036 (DONE) - 2026-04-14T02:15
+- title: CLI serve 명령 + 통합 스모크 테스트
+- assignee: coder
+- summary: cli.py serve 명령 (--host/--port/--reload, ABC_CONFIG env로 factory에 config 전달). create_app이 settings_path=None이면 env fallback. settings.yaml web 블록(host/port). scripts/smoke_web.py (subprocess uvicorn + httpx 9개 엔드포인트 검증 + atexit 종료). README 웹 UI 실행 섹션. SMOKE OK 확인.
+- report: signal/abc-english/coder-report-TASK-036.md
+
+### TASK-037 (DONE) - 2026-04-14T02:45
+- title: Docker Compose 배포 환경 구축 (nginx + gunicorn, HTTP, host 8081)
+- assignee: coder
+- summary: deploy/ 하위 Dockerfile(python:3.11-slim + gunicorn), docker-compose.yml(app expose-only 8000 + nginx 8081:80, host.docker.internal:host-gateway, data/config ro 볼륨), nginx.conf(/static alias + / proxy_pass app:8000, Range용 buffering off + HTTP/1.1, read_timeout 300s). settings.docker.yaml (ES/Ollama host.docker.internal 오버라이드). .dockerignore, README Docker 섹션 추가. compose config OK.
+- report: signal/abc-english/coder-report-TASK-037.md

@@ -200,10 +200,12 @@ class TestOllamaProvider:
         assert provider.model == "test-model"
         assert provider.base_url == "http://localhost:11434"
 
-    def test_generate(self, sample_settings):
+    def test_generate_chat_mode(self, sample_settings):
         provider = OllamaProvider(sample_settings)
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": "ollama says hello"}
+        mock_resp.json.return_value = {
+            "message": {"role": "assistant", "content": "ollama says hello"}
+        }
         mock_resp.raise_for_status = MagicMock()
 
         with patch(
@@ -213,20 +215,24 @@ class TestOllamaProvider:
 
         assert result == "ollama says hello"
         mock_post.assert_called_once_with(
-            "http://localhost:11434/api/generate",
+            "http://localhost:11434/api/chat",
             json={
                 "model": "test-model",
-                "prompt": "test prompt",
+                "messages": [
+                    {"role": "system", "content": "sys prompt"},
+                    {"role": "user", "content": "test prompt"},
+                ],
                 "stream": False,
-                "system": "sys prompt",
             },
-            timeout=120,
+            timeout=300,
         )
 
     def test_generate_without_system(self, sample_settings):
         provider = OllamaProvider(sample_settings)
         mock_resp = MagicMock()
-        mock_resp.json.return_value = {"response": "hi"}
+        mock_resp.json.return_value = {
+            "message": {"role": "assistant", "content": "hi"}
+        }
         mock_resp.raise_for_status = MagicMock()
 
         with patch(
@@ -235,7 +241,45 @@ class TestOllamaProvider:
             provider.generate("prompt only")
 
         payload = mock_post.call_args[1]["json"]
-        assert "system" not in payload
+        messages = payload["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+
+    def test_generate_legacy_mode(self, sample_settings):
+        sample_settings["llm"]["ollama"]["api_mode"] = "generate"
+        provider = OllamaProvider(sample_settings)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"response": "legacy response"}
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch(
+            "src.llm_analyzer.http_requests.post", return_value=mock_resp
+        ) as mock_post:
+            result = provider.generate("test prompt")
+
+        assert result == "legacy response"
+        assert "/api/generate" in mock_post.call_args[0][0]
+
+    def test_options_passed_to_api(self, sample_settings):
+        sample_settings["llm"]["ollama"]["options"] = {
+            "num_ctx": 32768,
+            "temperature": 0.3,
+        }
+        provider = OllamaProvider(sample_settings)
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {
+            "message": {"role": "assistant", "content": "ok"}
+        }
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch(
+            "src.llm_analyzer.http_requests.post", return_value=mock_resp
+        ) as mock_post:
+            provider.generate("test")
+
+        payload = mock_post.call_args[1]["json"]
+        assert payload["options"]["num_ctx"] == 32768
+        assert payload["options"]["temperature"] == 0.3
 
 
 # ===================================================================

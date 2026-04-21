@@ -151,20 +151,63 @@ class AnthropicProvider(LLMProvider):
 
 
 class OllamaProvider(LLMProvider):
-    """LLM provider backed by a local Ollama instance."""
+    """LLM provider backed by a local Ollama instance.
+
+    Uses the ``/api/chat`` endpoint (messages format) which works well
+    with chat-oriented models like gemma4, llama3, etc.  Falls back to
+    ``/api/generate`` if ``api_mode`` is set to ``"generate"`` in settings.
+    """
 
     def __init__(self, settings: dict) -> None:
         llm_cfg = settings.get("llm", {}).get("ollama", {})
-        self.model = llm_cfg.get("model", "llama3")
+        self.model = llm_cfg.get("model", "gemma4:e2b")
         self.base_url = llm_cfg.get("base_url", "http://localhost:11434").rstrip("/")
+        self.api_mode = llm_cfg.get("api_mode", "chat")  # "chat" or "generate"
+        self.timeout = llm_cfg.get("timeout", 300)
+        self.options = llm_cfg.get("options", {})
         logger.info(
-            "OllamaProvider initialised (model=%s, base_url=%s)",
+            "OllamaProvider initialised (model=%s, base_url=%s, api_mode=%s)",
             self.model,
             self.base_url,
+            self.api_mode,
         )
 
     def generate(self, prompt: str, system: str = "") -> str:
-        """Call the Ollama REST API and return the generated text."""
+        """Call the Ollama API and return the generated text.
+
+        Uses ``/api/chat`` (default) or ``/api/generate`` depending on
+        the ``api_mode`` setting.
+        """
+        if self.api_mode == "generate":
+            return self._generate_legacy(prompt, system)
+        return self._generate_chat(prompt, system)
+
+    def _generate_chat(self, prompt: str, system: str = "") -> str:
+        """Call the Ollama Chat API (``/api/chat``)."""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+        }
+        if self.options:
+            payload["options"] = self.options
+
+        url = f"{self.base_url}/api/chat"
+        resp = http_requests.post(url, json=payload, timeout=self.timeout)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Chat API returns {"message": {"role": "assistant", "content": "..."}}
+        message = data.get("message", {})
+        return message.get("content", "")
+
+    def _generate_legacy(self, prompt: str, system: str = "") -> str:
+        """Call the Ollama Generate API (``/api/generate``)."""
         payload: dict = {
             "model": self.model,
             "prompt": prompt,
@@ -172,9 +215,11 @@ class OllamaProvider(LLMProvider):
         }
         if system:
             payload["system"] = system
+        if self.options:
+            payload["options"] = self.options
 
         url = f"{self.base_url}/api/generate"
-        resp = http_requests.post(url, json=payload, timeout=120)
+        resp = http_requests.post(url, json=payload, timeout=self.timeout)
         resp.raise_for_status()
         data = resp.json()
         return data.get("response", "")

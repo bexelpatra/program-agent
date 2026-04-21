@@ -145,13 +145,27 @@ def fetch_episode_list(settings: dict) -> List[Dict[str, Any]]:
             if ep_id and ep_id not in seen_ids:
                 seen_ids.add(ep_id)
                 ep_url = _build_episode_url(item, base_url)
+
+                # New ABC schema stores these under "prepared" wrappers;
+                # fall back to legacy flat keys when present.
+                attribution = item.get("cardAttributionPrepared") or {}
+                media_indicator = item.get("cardMediaIndicatorPrepared") or {}
+
+                title = item.get("cardTitle") or _deep_get(item, "title", default="")
+                published = attribution.get("publishedDate") or _deep_get(
+                    item, "publishedDate", default=""
+                )
+                duration = media_indicator.get("duration") or _deep_get(
+                    item, "duration", default=0
+                )
+
                 all_episodes.append(
                     {
                         "episode_id": ep_id,
-                        "title": _deep_get(item, "title", default=""),
+                        "title": title,
                         "description": _deep_get(item, "description", default=""),
-                        "published_date": _deep_get(item, "publishedDate", default=""),
-                        "duration_seconds": _deep_get(item, "duration", default=0),
+                        "published_date": published,
+                        "duration_seconds": duration,
                         "url": ep_url,
                         "audio_url": _extract_audio_url(item),
                     }
@@ -188,6 +202,9 @@ def _extract_items_from_next_data(data: dict) -> List[dict]:
     non-empty list found.
     """
     paths = [
+        # Current ABC schema (Next.js "prepared" props)
+        ["props", "pageProps", "programCollectionPrepared", "items"],
+        # Legacy paths kept as fallbacks
         ["props", "pageProps", "data", "program", "episodes", "items"],
         ["props", "pageProps", "data", "items"],
         ["props", "pageProps", "episodes"],
@@ -209,14 +226,27 @@ def _extract_items_from_next_data(data: dict) -> List[dict]:
 
 def _extract_episode_id(item: dict) -> Optional[str]:
     """Extract a unique episode ID from a list-page item dict."""
-    # Try direct id field
-    for key in ("id", "episodeId", "episode_id"):
+    # Try direct id field (new schema uses cardId)
+    for key in ("cardId", "id", "episodeId", "episode_id"):
         val = item.get(key)
         if val is not None:
             return str(val)
 
-    # Try extracting from a URL/slug field
-    link = item.get("link") or item.get("url") or item.get("slug", "")
+    # Try extracting trailing numeric ID from contentUri
+    # e.g. "coremedia://audioepisode/106559814"
+    content_uri = item.get("contentUri", "")
+    if content_uri:
+        parts = str(content_uri).rstrip("/").split("/")
+        if parts and parts[-1].isdigit():
+            return parts[-1]
+
+    # Try extracting from a URL/slug field (new schema uses articleLink)
+    link = (
+        item.get("articleLink")
+        or item.get("link")
+        or item.get("url")
+        or item.get("slug", "")
+    )
     if link:
         parts = str(link).rstrip("/").split("/")
         if parts and parts[-1].isdigit():
@@ -227,7 +257,7 @@ def _extract_episode_id(item: dict) -> Optional[str]:
 
 def _build_episode_url(item: dict, base_url: str) -> str:
     """Build a full episode URL from an item dict."""
-    link = item.get("link") or item.get("url") or ""
+    link = item.get("articleLink") or item.get("link") or item.get("url") or ""
     link = str(link)
     if link.startswith("http"):
         return link
@@ -245,11 +275,20 @@ def _build_episode_url(item: dict, base_url: str) -> str:
 
 
 def _extract_audio_url(item: dict) -> str:
-    """Try to extract the MP3 URL from a list-page item."""
+    """Try to extract the MP3 URL from a list-page or detail item."""
     for key in ("audioUrl", "audio_url", "mediaUrl", "audio"):
         val = item.get(key)
         if val and isinstance(val, str):
             return val
+
+    # New ABC schema: detail page exposes media via a "renditions" list.
+    renditions = item.get("renditions")
+    if isinstance(renditions, list):
+        for r in renditions:
+            if isinstance(r, dict):
+                url = r.get("url")
+                if isinstance(url, str) and url:
+                    return url
 
     # May be nested under a 'media' dict
     media = item.get("media") or item.get("audio") or {}
@@ -310,10 +349,20 @@ def fetch_episode_detail(url: str, settings: dict) -> Dict[str, Any]:
                 episode_data.get("id", "") or episode_data.get("episodeId", "")
             )
             result["title"] = episode_data.get("title", "")
-            result["description"] = episode_data.get("description", "")
-            result["published_date"] = episode_data.get(
-                "publishedDate", ""
-            ) or episode_data.get("published_date", "")
+            # New schema uses "synopsis"; legacy used "description"
+            result["description"] = (
+                episode_data.get("description") or episode_data.get("synopsis") or ""
+            )
+            # New schema nests publishedDate under datelinePrepared,
+            # or exposes "availableFrom" as the effective publish time.
+            dateline = episode_data.get("datelinePrepared") or {}
+            result["published_date"] = (
+                episode_data.get("publishedDate")
+                or episode_data.get("published_date")
+                or dateline.get("publishedDate")
+                or episode_data.get("availableFrom")
+                or ""
+            )
             result["duration_seconds"] = episode_data.get(
                 "duration", 0
             ) or episode_data.get("duration_seconds", 0)
@@ -333,6 +382,9 @@ def fetch_episode_detail(url: str, settings: dict) -> Dict[str, Any]:
 def _extract_episode_from_detail(data: dict) -> Optional[dict]:
     """Extract episode dict from a detail page's __NEXT_DATA__."""
     paths = [
+        # Current ABC schema
+        ["props", "pageProps", "data", "documentProps"],
+        # Legacy fallbacks
         ["props", "pageProps", "data", "episode"],
         ["props", "pageProps", "episode"],
         ["props", "pageProps", "data", "item"],
@@ -359,15 +411,14 @@ def _extract_episode_from_detail(data: dict) -> Optional[dict]:
 def parse_transcript(html_content: str) -> dict:
     """Extract transcript text from the ``div#transcript`` element.
 
-    Parses the HTML, strips tags, normalises whitespace, and splits the
-    text into individual sentences (splitting on ``./!/?``).
+    Each ``<p>`` inside the transcript is one speaker's utterance and is
+    kept as a single entry in ``sentences`` (including the speaker prefix
+    like "Sam Hawley: ..."). This avoids splitting on periods inside
+    abbreviations ("J.D. Vance", "U.S.") and matches the natural reading
+    structure of the source page.
 
-    Args:
-        html_content: Full HTML of an episode page.
-
-    Returns:
-        A dict with keys ``full_text`` (str) and ``sentences`` (list[str]).
-        Returns empty values when no transcript element is found.
+    Returns a dict with keys ``full_text`` (str) and ``sentences`` (list[str]).
+    Returns empty values when no transcript element is found.
     """
     soup = BeautifulSoup(html_content, "html.parser")
     transcript_el = soup.find(id="transcript")
@@ -375,20 +426,55 @@ def parse_transcript(html_content: str) -> dict:
     if transcript_el is None:
         return {"full_text": "", "sentences": []}
 
-    # Get text, collapsing whitespace but preserving paragraph breaks
-    raw_text = transcript_el.get_text(separator=" ", strip=True)
-    # Normalise whitespace
-    full_text = re.sub(r"\s+", " ", raw_text).strip()
+    paragraphs = transcript_el.find_all("p")
+    utterances: List[str] = []
+    if paragraphs:
+        for p in paragraphs:
+            text = p.get_text(separator=" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
+            if text:
+                utterances.append(text)
+    else:
+        # No <p> wrapping — fall back to the full text block.
+        text = transcript_el.get_text(separator=" ", strip=True)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            utterances.append(text)
 
-    if not full_text:
+    if not utterances:
         return {"full_text": "", "sentences": []}
 
-    # Split on sentence-ending punctuation, keeping the punctuation attached
-    # e.g. "Hello world. How are you? Fine!" -> ["Hello world.", "How are you?", "Fine!"]
-    raw_sentences = re.split(r"(?<=[.!?])\s+", full_text)
-    sentences = [s.strip() for s in raw_sentences if s.strip()]
+    full_text = " ".join(utterances)
+    return {"full_text": full_text, "sentences": utterances}
 
-    return {"full_text": full_text, "sentences": sentences}
+
+def save_raw_transcript_html(
+    episode_id: str,
+    html_content: str,
+    settings: dict,
+) -> Optional[str]:
+    """Save the raw ``div#transcript`` inner HTML to a standalone file.
+
+    Kept separate from :func:`save_transcript` so that re-processing with
+    different parsing rules does not require re-fetching the source page.
+    File path: ``{data.transcript_dir}/{episode_id}_raw.html``.
+    Returns None if the transcript element is absent.
+    """
+    soup = BeautifulSoup(html_content, "html.parser")
+    transcript_el = soup.find(id="transcript")
+    if transcript_el is None:
+        return None
+
+    data_conf = settings.get("data", {})
+    transcript_dir = data_conf.get("transcript_dir", "data/transcripts")
+    project_root = Path(__file__).resolve().parent.parent
+    out_dir = project_root / transcript_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    out_path = out_dir / f"{episode_id}_raw.html"
+    out_path.write_text(transcript_el.decode_contents(), encoding="utf-8")
+    logger.info("Saved raw transcript HTML for %s → %s", episode_id, out_path)
+    return str(out_path)
 
 
 def save_transcript(
@@ -515,7 +601,10 @@ def download_mp3(
 # ---------------------------------------------------------------------------
 
 
-def collect_all(settings: Optional[dict] = None) -> List[Episode]:
+def collect_all(
+    settings: Optional[dict] = None,
+    limit: Optional[int] = None,
+) -> List[Episode]:
     """Run the full collection pipeline.
 
     1. Fetch the paginated episode list.
@@ -527,6 +616,8 @@ def collect_all(settings: Optional[dict] = None) -> List[Episode]:
 
     Args:
         settings: Loaded settings dict.  If None, loads from default path.
+        limit: If provided, only process the first N episodes from the listing
+            (useful for testing). None means process all.
 
     Returns:
         List of Episode instances (includes both has_transcript=True and False).
@@ -539,6 +630,9 @@ def collect_all(settings: Optional[dict] = None) -> List[Episode]:
 
     logger.info("Starting episode collection...")
     raw_list = fetch_episode_list(settings)
+    if limit is not None and limit > 0:
+        logger.info("Limiting collection to first %d episode(s).", limit)
+        raw_list = raw_list[:limit]
 
     episodes: List[Episode] = []
     for idx, raw in enumerate(raw_list, 1):
@@ -591,6 +685,12 @@ def collect_all(settings: Optional[dict] = None) -> List[Episode]:
 
         # --- Transcript parsing (only for episodes with transcript) ---
         if has_transcript and detail_html and episode_id:
+            try:
+                save_raw_transcript_html(episode_id, detail_html, settings)
+            except Exception as exc:
+                logger.error(
+                    "Failed to save raw transcript for %s: %s", episode_id, exc
+                )
             try:
                 transcript_data = parse_transcript(detail_html)
                 if transcript_data["full_text"]:

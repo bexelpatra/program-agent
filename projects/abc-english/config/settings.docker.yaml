@@ -1,4 +1,17 @@
-# ABC News Daily English Study - Configuration
+# ABC News Daily English Study - Configuration (Docker deployment override)
+#
+# Full copy of settings.yaml with only the host/port values needed to reach
+# services running on the Docker host instead of inside the container.
+# Kept as a standalone file (rather than merged at runtime) so learners can
+# `diff config/settings.yaml config/settings.docker.yaml` and see the deltas.
+#
+# Deltas vs settings.yaml:
+#   - elasticsearch.host: localhost        -> host.docker.internal
+#   - llm.ollama.host:    http://localhost -> http://host.docker.internal
+#   - llm.ollama.base_url: http://localhost -> http://host.docker.internal
+#   - web.host:           127.0.0.1        -> 0.0.0.0  (bind inside container)
+#   - web.port:           8081             -> 8000     (gunicorn listens here;
+#                                                       nginx publishes host 8081)
 
 crawling:
   base_url: "https://www.abc.net.au"
@@ -15,7 +28,7 @@ whisper:
   output_format: "json"       # json with timestamps
 
 elasticsearch:
-  host: "localhost"
+  host: "ethics-es"
   port: 9200
   scheme: "http"
   indices:
@@ -34,9 +47,9 @@ llm:
     max_tokens: 4096
     batch_size: 10            # sentences per batch
   ollama:
-    host: "http://localhost:11434"
+    host: "http://host.docker.internal:11434"
     model: "gemma4:e4b-ctx16384"
-    base_url: "http://localhost:11434"
+    base_url: "http://host.docker.internal:11434"
     api_mode: "chat"          # chat (recommended) | generate (legacy)
     timeout_seconds: 120      # seconds (web lookup default)
     timeout: 300              # seconds (batch llm_analyzer default, larger models need more time)
@@ -71,8 +84,8 @@ llm:
           }}
 
 web:
-  host: "127.0.0.1"
-  port: 8081
+  host: "0.0.0.0"
+  port: 8000
 
 data:
   audio_dir: "data/audio"

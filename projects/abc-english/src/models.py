@@ -91,6 +91,41 @@ class Expression(BaseModel):
     example_sentences: List[ExampleSentence] = Field(default_factory=list)
 
 
+class SourceEpisodeRef(BaseModel):
+    """Reference to the episode/sentence where a notebook term was added."""
+
+    episode_id: str
+    sentence_index: int = 0
+    added_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class UserVocabularyEntry(BaseModel):
+    """A user-managed notebook entry for a term (word/phrase/idiom)."""
+
+    term: str
+    term_type: Literal["word", "phrasal_verb", "idiom", "collocation"] = "word"
+    explanation_en: str = ""
+    etymology: str = ""
+    added_count: int = 1
+    view_count: int = 0
+    first_added: datetime = Field(default_factory=datetime.utcnow)
+    last_added: datetime = Field(default_factory=datetime.utcnow)
+    last_viewed: Optional[datetime] = None
+    source_episodes: List[SourceEpisodeRef] = Field(default_factory=list)
+    note: str = ""
+
+
+class LlmCacheEntry(BaseModel):
+    """A cached LLM (Ollama) response for a term lookup."""
+
+    cache_key: str
+    term: str
+    model: str
+    prompt_version: str
+    response: dict = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 # ---------------------------------------------------------------------------
 # ES index mappings
 # ---------------------------------------------------------------------------
@@ -176,12 +211,62 @@ EXPRESSION_MAPPING = {
     }
 }
 
+USER_VOCABULARY_MAPPING = {
+    "settings": {
+        "analysis": {
+            "normalizer": {
+                "lowercase_normalizer": {
+                    "type": "custom",
+                    "filter": ["lowercase"],
+                }
+            }
+        }
+    },
+    "mappings": {
+        "properties": {
+            "term": {"type": "keyword", "normalizer": "lowercase_normalizer"},
+            "term_type": {"type": "keyword"},
+            "explanation_en": {"type": "text", "analyzer": "english"},
+            "etymology": {"type": "text", "analyzer": "english"},
+            "added_count": {"type": "integer"},
+            "view_count": {"type": "integer"},
+            "first_added": {"type": "date"},
+            "last_added": {"type": "date"},
+            "last_viewed": {"type": "date"},
+            "source_episodes": {
+                "type": "nested",
+                "properties": {
+                    "episode_id": {"type": "keyword"},
+                    "sentence_index": {"type": "integer"},
+                    "added_at": {"type": "date"},
+                },
+            },
+            "note": {"type": "text"},
+        }
+    },
+}
+
+LLM_CACHE_MAPPING = {
+    "mappings": {
+        "properties": {
+            "cache_key": {"type": "keyword"},
+            "term": {"type": "keyword"},
+            "model": {"type": "keyword"},
+            "prompt_version": {"type": "keyword"},
+            "response": {"type": "object", "enabled": True},
+            "created_at": {"type": "date"},
+        }
+    }
+}
+
 # Map logical index keys (matching settings.yaml) to their mappings.
 INDEX_MAPPINGS = {
     "episodes": EPISODE_MAPPING,
     "sentences": SENTENCE_MAPPING,
     "vocabulary": VOCABULARY_MAPPING,
     "expressions": EXPRESSION_MAPPING,
+    "user_vocabulary": USER_VOCABULARY_MAPPING,
+    "llm_cache": LLM_CACHE_MAPPING,
 }
 
 

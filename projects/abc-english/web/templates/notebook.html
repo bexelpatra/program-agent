@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}단어장 — ABC English{% endblock %}
+
+{% block content %}
+<section class="page page-notebook">
+  <header class="page-header">
+    <h1>단어장</h1>
+    <p class="page-sub">내가 저장한 단어/숙어/구동사</p>
+  </header>
+
+  <div class="notebook-toolbar">
+    <input id="nb-search" type="search" placeholder="term/설명 검색..." aria-label="검색" />
+    <label class="nb-toolbar-label">
+      유형
+      <select id="nb-type" aria-label="유형 필터">
+        <option value="">전체</option>
+        <option value="word">word</option>
+        <option value="phrasal_verb">phrasal_verb</option>
+        <option value="idiom">idiom</option>
+        <option value="collocation">collocation</option>
+      </select>
+    </label>
+    <label class="nb-toolbar-label">
+      정렬
+      <select id="nb-sort" aria-label="정렬">
+        <option value="last_added">최근 추가순</option>
+        <option value="added_count">추가 횟수</option>
+        <option value="last_viewed">최근 조회순</option>
+      </select>
+    </label>
+    <span id="nb-count" class="muted"></span>
+  </div>
+
+  <div id="notebook-list" class="notebook-list" data-loading="true">
+    <p class="muted">로딩 중…</p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/notebook.js"></script>
+{% endblock %}

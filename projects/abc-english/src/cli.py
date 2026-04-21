@@ -70,13 +70,19 @@ def cli(ctx: click.Context, config: str) -> None:
 
 
 @cli.command()
+@click.option(
+    "--limit",
+    type=int,
+    default=None,
+    help="Only collect the first N episodes from the listing (useful for testing).",
+)
 @click.pass_context
-def collect(ctx: click.Context) -> None:
+def collect(ctx: click.Context, limit: int | None) -> None:
     """Collect episodes (listing, detail, transcript, MP3)."""
     from src.collector import collect_all
 
     settings = _load_settings(ctx.obj["config"])
-    episodes = collect_all(settings)
+    episodes = collect_all(settings, limit=limit)
 
     has_transcript = sum(1 for ep in episodes if ep.has_transcript)
     click.echo(
@@ -284,6 +290,37 @@ def run_all(ctx: click.Context) -> None:
     click.echo("\n=== Full pipeline complete ===")
 
 
+@cli.command("schedule")
+@click.option(
+    "--once",
+    is_flag=True,
+    default=False,
+    help="Run the check-and-maybe-run cycle immediately once, then exit.",
+)
+@click.option(
+    "--time",
+    "time_override",
+    type=str,
+    default=None,
+    help="Override the scheduled time (HH:MM, 24h) for this run.",
+)
+@click.pass_context
+def schedule(ctx: click.Context, once: bool, time_override: str | None) -> None:
+    """Run the weekday scheduler that auto-detects new episodes."""
+    from src import scheduler as sched
+
+    settings = _load_settings(ctx.obj["config"])
+    config_path = ctx.obj["config"]
+
+    if once:
+        summary = sched.run_once(settings, config_path=config_path)
+        click.echo(f"One-shot run complete: {summary}")
+        return
+
+    click.echo("Starting scheduler (Ctrl+C to stop)...")
+    sched.run_forever(settings, config_path=config_path, time_override=time_override)
+
+
 @cli.command("init-indices")
 @click.pass_context
 def init_indices(ctx: click.Context) -> None:
@@ -320,6 +357,50 @@ def delete_indices(ctx: click.Context) -> None:
         click.echo(f"  {key}: {info['index_name']} ({status})")
 
     click.echo("Index deletion complete.")
+
+
+@cli.command("serve")
+@click.option(
+    "--host",
+    default=None,
+    help="Bind host (default: 127.0.0.1 or web.host in settings).",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=None,
+    help="Bind port (default: 8080 or web.port in settings).",
+)
+@click.option(
+    "--reload", is_flag=True, default=False, help="Enable uvicorn auto-reload."
+)
+@click.pass_context
+def serve(ctx: click.Context, host: str | None, port: int | None, reload: bool) -> None:
+    """Start the FastAPI web UI via uvicorn."""
+    import os
+
+    import uvicorn
+
+    config_path = ctx.obj["config"]
+    settings = _load_settings(config_path)
+    web_cfg = settings.get("web") or {}
+
+    final_host = host or web_cfg.get("host") or "127.0.0.1"
+    final_port = port or web_cfg.get("port") or 8080
+
+    # Pass config path to factory via env var (uvicorn does not pass args to factory).
+    os.environ["ABC_CONFIG"] = str(Path(config_path).resolve())
+
+    click.echo(
+        f"Starting web server on http://{final_host}:{final_port} (reload={reload})"
+    )
+    uvicorn.run(
+        "web.app:create_app",
+        factory=True,
+        host=final_host,
+        port=int(final_port),
+        reload=reload,
+    )
 
 
 if __name__ == "__main__":

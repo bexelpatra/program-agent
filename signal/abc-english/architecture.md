@@ -248,6 +248,137 @@ projects/abc-english/
 
 ---
 
-## 현재 상태
-- 프로젝트 초기화 단계
-- 태스크 분해 완료, 실행 대기 중
+## 웹 학습 UI (2026-04-14 추가)
+
+### 목적
+브라우저에서 에피소드를 골라 듣고, 자막 싱크·단어 즉시 조회·단어장 관리까지 한 곳에서 수행한다.
+
+### 스택
+- Backend: FastAPI (기존 ES 클라이언트/모델 재사용), `httpx.AsyncClient`로 Ollama 호출, uvicorn 서빙
+- Frontend: 단일 페이지 정적 HTML 3종(`/`, `/study/{id}`, `/notebook`) + vanilla JS 모듈. 빌드 도구 없음.
+- 템플릿: Jinja2 (서버사이드 초기 렌더링) + 이후 fetch API로 상호작용
+- 오디오: `<audio>` + HTTP Range 스트리밍 (서버에서 Range 헤더 수동 처리)
+- LLM: Ollama HTTP API (`http://localhost:11434/api/generate`), 모델 기본 `gemma4:e2b` (설정으로 변경 가능)
+
+### 디렉토리
+```
+projects/abc-english/web/
+├── __init__.py
+├── app.py              # FastAPI 앱
+├── api/
+│   ├── episodes.py     # /api/episodes, /api/episodes/{id}
+│   ├── audio.py        # /api/audio/{id} (Range 지원)
+│   ├── lookup.py       # /api/lookup (ollama + 캐시)
+│   └── notebook.py     # /api/notebook CRUD
+├── templates/
+│   ├── base.html
+│   ├── episodes.html
+│   ├── study.html
+│   └── notebook.html
+└── static/
+    ├── css/app.css
+    └── js/
+        ├── common.js
+        ├── study.js
+        └── notebook.js
+```
+
+### 신규 데이터 모델
+
+#### abc-user-vocabulary (단어장)
+```json
+{
+  "term": "take the fall",
+  "term_type": "idiom | phrasal_verb | word",
+  "explanation_en": "...",
+  "etymology": "...",           // idiom일 때 필수
+  "added_count": 3,
+  "view_count": 12,
+  "first_added": "2026-04-14T10:00:00Z",
+  "last_added": "2026-04-20T15:00:00Z",
+  "last_viewed": "2026-04-22T20:00:00Z",
+  "source_episodes": [
+    {"episode_id": "106551254", "sentence_index": 15, "added_at": "2026-04-14T10:00:00Z"}
+  ],
+  "note": ""                    // 사용자 메모
+}
+```
+key: `term`(lowercase, 공백 정규화).
+
+#### abc-llm-cache (Ollama 응답 캐시)
+```json
+{
+  "cache_key": "sha1(term + model + prompt_version)",
+  "term": "...",
+  "model": "gemma4:e2b",
+  "prompt_version": "v1",
+  "response": { "term_type": "...", "explanation_en": "...", "etymology": "...", "examples": [] },
+  "created_at": "2026-04-14T10:00:00Z"
+}
+```
+
+### 주요 API
+| Method | Path | 설명 |
+|--------|------|------|
+| GET | /api/episodes | 에피소드 목록 (published_date desc) |
+| GET | /api/episodes/{id} | 에피소드 상세 + sentences (timestamps 포함) |
+| GET | /api/audio/{id} | MP3 스트리밍 (Range 지원) |
+| POST | /api/lookup | {term, context?} → ollama 질의 + 캐시. 캐시 hit 시 즉시 반환 |
+| GET | /api/notebook | 단어장 목록 (sort/filter) |
+| POST | /api/notebook | 단어장 추가/업서트 (added_count++, source_episodes append) |
+| PATCH | /api/notebook/{term}/viewed | last_viewed 갱신, view_count++ |
+| DELETE | /api/notebook/{term} | 단어장에서 제거 |
+
+### Ollama 프롬프트 규격 (prompt_version: v1)
+System: "You are an expert English teacher helping Korean learners with news English."
+User 입력: term + 선택적 context 문장.
+지시:
+- term의 유형을 판별: `word` / `phrasal_verb` / `idiom` / `collocation`
+- 영어 설명(explanation_en) 작성
+- **idiom이면 etymology(왜 그런 뜻이 되었는지) 반드시 포함**
+- 2~3개 예문 제공
+- 출력은 JSON (Pydantic 파싱)
+
+### UI/UX 결정
+- **학습 페이지**: 오디오 플레이어(재생/정지/배속 0.5~2x/앞뒤 스킵 **기본 3초, 설정 가능**) + 전체 스크립트 토글 + 자막 하이라이트 토글. 단어 클릭 또는 드래그 선택 → lookup 모달. "단어장 추가" 버튼 → ollama 설명까지 함께 저장.
+- **우측 슬라이드 드로어**(단어장 프리뷰): `N` 단축키(input focus 시 비활성) 또는 우상단 버튼으로 토글. 드로어 열려도 학습 영역은 유지. 단어 추가 시 드로어 닫혀있으면 뱃지 카운터 +1 애니메이션.
+- **단어장 전용 페이지**: 필터(term_type), 정렬(last_added/added_count/last_viewed), 출처 에피소드 클릭 → 해당 에피소드 학습 페이지로 점프.
+
+### 설계 결정
+- **캐시와 단어장 이중 저장**: 캐시는 term 기반 영구, 단어장은 캐시 스냅샷 복사. 사용자가 단어장 설명을 개인 수정할 여지를 남김.
+- **자막 싱크 최적화**: 현재 세그먼트 인덱스를 JS에서 캐시하고 `timeupdate`마다 인접 범위만 체크 (O(1) 전환).
+- **Path traversal 방지**: 오디오 엔드포인트는 `episode_id`만 입력받고 파일명은 서버에서 결정.
+- **Ollama 모델명 검증**: 서버 시작 시 `ollama /api/tags` 호출, 없으면 경고 로그. 질의는 설정값 그대로 시도.
+- **인증 없음**: 로컬 단일 사용자 도구.
+
+---
+
+## Phase 9: ELK 학습 실습 (2026-04-15 추가)
+
+### 목적
+사용자는 ELK 스택 초심자. 목표는 "대시보드를 만든다"가 **아니라** "면접/이직에서 설명 가능한 수준으로 ELK 개념을 익힌다"이다. 실행 산출물보다 **학습 노트**가 중심 결과물.
+
+### 산출물
+```
+projects/abc-english/
+├── docs/
+│   ├── elk-learning.md          # TASK-038: ES 구조 학습 노트 (인덱스/매핑/shard/analyzer)
+│   ├── elk-queries.md           # TASK-039: DSL 쿼리 10종 카탈로그 (주석+실행결과)
+│   └── elk-interview-notes.md   # TASK-041: 면접 답변 수준 요약
+└── kibana/
+    └── dashboards.ndjson        # TASK-040: Kibana export
+```
+
+### 학습 단계 원칙
+- **멈춤 포인트**: 각 태스크마다 사용자가 직접 curl/Dev Tools로 쿼리를 찔러볼 수 있도록 Coder는 **재현 가능한 명령 예제**를 학습 노트에 남긴다.
+- **자기 언어로 쓰기**: 노트는 위키 요약 복붙 금지. "왜 이렇게 동작하는가"를 본인 문장으로 정리.
+- **시각 자료**: Kibana 대시보드는 스크린샷 대신 `dashboards.ndjson`으로 export해 재현 가능하게 저장.
+
+### 4개 인덱스 기준 시각화 (TASK-040)
+| 패널 | 소스 인덱스 | 타입 | 목적 |
+|------|-------------|------|------|
+| 단어 빈도 Top 20 | abc-vocabulary | Bar (horizontal) | 학습 가치 높은 어휘 식별 |
+| CEFR 난이도 분포 | abc-vocabulary + abc-expressions | Donut | 전체 컨텐츠 수준 파악 |
+| 에피소드별 평균 WER | abc-episodes | Bar (time) | 듣기 난이도 추이 |
+| Expressions 타입 카운트 | abc-expressions | Metric + Table | idiom/phrasal_verb/collocation 비율 |
+

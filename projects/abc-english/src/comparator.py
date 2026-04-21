@@ -5,6 +5,7 @@ matches sentences to Whisper segments via greedy alignment, and assigns
 listening-difficulty labels based on WER thresholds.
 """
 
+import difflib
 import json
 import logging
 import re
@@ -131,68 +132,79 @@ def compare_sentences(
     official_sentences: List[str],
     whisper_segments: List[dict],
 ) -> List[dict]:
-    """Match official sentences to Whisper segments and compute per-sentence WER.
+    """Match official sentences to Whisper segments via word-level alignment.
 
-    Uses a greedy forward alignment: for each official sentence we
-    accumulate consecutive Whisper segments until the accumulated text
-    length is at least as long as the official sentence, then move on.
+    Uses :class:`difflib.SequenceMatcher` on normalised token streams to
+    find matching blocks between the whisper audio transcript and the
+    official sentence-split transcript. Unmatched whisper tokens (intros,
+    ads, outros) are naturally skipped because they have no counterpart
+    in the official transcript.
 
-    Args:
-        official_sentences: List of sentence strings from the official
-            transcript.
-        whisper_segments: List of dicts, each with ``text``, ``start``,
-            and ``end`` keys.
-
-    Returns:
-        A list of dicts, one per official sentence, with keys:
-        ``sentence_index``, ``official_text``, ``whisper_text``,
-        ``start_time``, ``end_time``, ``wer``, ``listening_difficulty``.
+    For each official sentence, the matched whisper token indices are
+    collected; the timestamps come from the whisper segments covering
+    those tokens. Sentences with no match fall back to the previous
+    sentence's end time (timestamp interpolation) so the UI never jumps
+    to 0:00 mid-stream.
     """
+    # Flat whisper tokens: (normalised_token, segment_idx)
+    whisper_tokens: List[Tuple[str, int]] = []
+    for seg_idx, seg in enumerate(whisper_segments):
+        for tok in _normalise(seg.get("text", "")):
+            whisper_tokens.append((tok, seg_idx))
+
+    # Flat official tokens grouped per sentence (start, end) range.
+    official_tokens: List[str] = []
+    sent_ranges: List[Tuple[int, int]] = []
+    for sent in official_sentences:
+        start = len(official_tokens)
+        official_tokens.extend(_normalise(sent))
+        sent_ranges.append((start, len(official_tokens)))
+
+    a = [t[0] for t in whisper_tokens]  # whisper token stream
+    b = official_tokens  # official token stream
+
+    # Map each official token position -> matched whisper token position.
+    official_to_whisper: List[Optional[int]] = [None] * len(b)
+    if a and b:
+        sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+        for block in sm.get_matching_blocks():
+            for k in range(block.size):
+                official_to_whisper[block.b + k] = block.a + k
+
     results: List[dict] = []
-    seg_idx = 0
-    num_segments = len(whisper_segments)
+    last_end_time = 0.0
 
-    for sent_idx, official_text in enumerate(official_sentences):
-        if seg_idx >= num_segments:
-            # No more Whisper segments -- mark remaining sentences with
-            # empty whisper text and WER of 1.0.
-            wer = 1.0 if official_text.strip() else 0.0
-            results.append(
-                {
-                    "sentence_index": sent_idx,
-                    "official_text": official_text,
-                    "whisper_text": "",
-                    "start_time": 0.0,
-                    "end_time": 0.0,
-                    "wer": wer,
-                    "listening_difficulty": calculate_listening_difficulty(wer),
-                }
-            )
-            continue
+    for sent_idx, (tok_start, tok_end) in enumerate(sent_ranges):
+        matched = [
+            official_to_whisper[i]
+            for i in range(tok_start, tok_end)
+            if official_to_whisper[i] is not None
+        ]
 
-        # Accumulate Whisper segments greedily.
-        matched_texts: List[str] = []
-        start_time = whisper_segments[seg_idx]["start"]
-        end_time = whisper_segments[seg_idx]["end"]
+        if matched:
+            w_lo, w_hi = min(matched), max(matched)
+            # Whisper text = the aligned token span (includes any
+            # unmatched whisper tokens sitting inside the span so the
+            # user can see what the audio actually says).
+            whisper_text = " ".join(a[w_lo : w_hi + 1])
+            start_seg = whisper_tokens[w_lo][1]
+            end_seg = whisper_tokens[w_hi][1]
+            start_time = float(whisper_segments[start_seg]["start"])
+            end_time = float(whisper_segments[end_seg]["end"])
+            last_end_time = end_time
+        else:
+            # No alignment — pin to previous sentence's end so the
+            # subtitle doesn't snap back to the intro.
+            whisper_text = ""
+            start_time = last_end_time
+            end_time = last_end_time
 
-        official_word_count = len(official_text.split())
-
-        while seg_idx < num_segments:
-            seg = whisper_segments[seg_idx]
-            matched_texts.append(seg["text"])
-            end_time = seg["end"]
-            seg_idx += 1
-
-            # Stop when accumulated words reach roughly the same length
-            # as the official sentence, unless this is the last official
-            # sentence (in which case consume all remaining segments).
-            accumulated_word_count = sum(len(t.split()) for t in matched_texts)
-            if sent_idx < len(official_sentences) - 1:
-                if accumulated_word_count >= official_word_count:
-                    break
-
-        whisper_text = " ".join(matched_texts)
-        wer = calculate_wer(official_text, whisper_text)
+        official_text = official_sentences[sent_idx]
+        wer = (
+            calculate_wer(official_text, whisper_text)
+            if whisper_text
+            else (1.0 if official_text.strip() else 0.0)
+        )
 
         results.append(
             {
