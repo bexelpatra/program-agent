@@ -34,6 +34,7 @@ program-agent/
 │       ├── architecture.md
 │       ├── coder-report.md
 │       ├── tester-report.md
+│       ├── reviewer-report.md
 │       └── retrospective.md
 ├── projects/
 │   └── {project-id}/                  # 프로젝트별 코드
@@ -127,13 +128,31 @@ program-agent/
 - 태스크 간 의존성이 있으면 `Depends On`에 명시한다.
 - 태스크는 하나의 에이전트가 한 번에 처리할 수 있는 크기로 분해한다.
 - **의존성 검증**: 프로젝트 초기화 태스크 완료 직후, 의존성 설치 및 import 검증을 수행한다.
+- **실측 인용 의무**: 태스크 description에 **구체 수치·파일 경로·라인 번호·심볼·개수·임계값**을 기재할 때는 기억/추정이 아니라 반드시 `Read`·`Grep`·`ls`·`Bash`로 **직전에 실측한 결과**를 인용한다. 실측 없이 적은 숫자는 Reviewer가 NEEDS_REVISION으로 돌려보내므로 Coder/Tester 호출이 지연된다. 예: "Section C 행 수 == 61 (map L139 실측)", "L337-L342 bare-id 경로". 모호한 표현("대략 50여 건", "L300 부근")은 금지.
 
 ### Step 3: 태스크 실행
 다음 실행할 태스크를 선택하고:
 
 1. `signal/{project-id}/task-board.md`에서 해당 태스크 상태를 `IN_PROGRESS`로 변경한다.
-2. 대상 에이전트의 프롬프트 템플릿(`agents/*.md`)을 읽는다.
-3. Agent tool로 서브에이전트를 호출한다.
+2. **Reviewer 검증 (필수)**: Coder/Tester를 호출하기 전, Reviewer를 먼저 호출해 Manager 산출물(task-board.md 해당 태스크, architecture.md, 참조된 파일 경로·심볼)이 현실과 일치하는지 검증받는다.
+   - Reviewer 판정이 **PASS**일 때에만 다음 단계로 진행.
+   - **NEEDS_REVISION**이면 Manager가 지적 사항을 반영해 산출물을 수정하고 Reviewer를 재호출한다. PASS 이전에는 Coder/Tester를 절대 호출하지 않는다.
+   - **ESCALATE**이면 사용자에게 판단을 요청한다.
+3. 대상 에이전트의 프롬프트 템플릿(`agents/*.md`)을 읽는다.
+4. Agent tool로 서브에이전트를 호출한다.
+
+**Reviewer Agent 호출 시:**
+```
+Agent tool 호출:
+- agents/reviewer.md의 내용을 프롬프트에 포함
+- 프로젝트 경로 명시:
+  - SIGNAL_DIR: signal/{project-id}/
+  - PROJECT_ROOT: projects/{project-id}/
+- 검증 대상 signal 파일 목록과 태스크 ID, Manager 주장 요약 전달
+- report 파일 경로 지시:
+  - 순차 실행: signal/{project-id}/reviewer-report.md
+  - 병렬 실행: signal/{project-id}/reviewer-report-{TASK-ID}.md
+```
 
 **Coder Agent 호출 시:**
 ```
@@ -174,7 +193,16 @@ Agent tool 호출:
      - 설계 문제이면: `architecture.md`를 수정하고 태스크를 재정의.
    - **BLOCKED**: 블로커를 해결할 태스크를 새로 생성한다.
 
-3. **Tester 발견 이슈 자동 태스크화**: Tester report에 `## 이슈/블로커` 또는 `## 코드 이슈` 섹션에 구체적인 코드 문제가 기술되어 있으면, Manager는 해당 이슈를 수정하는 태스크를 `task-board.md`에 새로 등록하고 Coder에게 할당한다.
+3. **Tester 발견 이슈 자동 태스크화**: Tester report frontmatter의 `severity` 필드를 기준으로 판단한다.
+   - `severity: blocker` 또는 `severity: bug` → Manager는 **반드시** 수정 태스크를 `task-board.md`에 등록하고 Coder에게 할당한다. Tester 본문 어투("관찰/참고용" 등)와 무관하게 강제.
+   - `severity: observation` → Manager 판단. 즉시 태스크화하거나 retrospective로 이월한다.
+   - severity가 생략되었는데 `## 이슈/블로커`에 구체적 코드 문제가 있으면, Manager가 severity를 추정해 동일 규칙을 적용한다.
+   - **원본 데이터 품질 이슈 분리** (DATA-QUALITY): 코드 결함이 아니라 입력 원본 파일(외부 소스·사용자 제공 md 등)의 포맷·escaping·누락으로 발생한 issue는 일반 FIX 태스크 대신 `TASK-DQ-*` prefix 태스크로 분리하고, `signal/{project-id}/data-quality-log.md` (append-only)에 적재한다. 원본 수정 금지 규정이 있는 프로젝트에서도 로그는 남아 배치 정정 시점에 일괄 처리한다. severity=observation으로 묻혀 사라지는 것을 방지한다.
+
+4. **Execution=user 태스크 처리**: `Execution: user` 인 태스크는 Manager가 서브에이전트로 자동 실행하지 않는다.
+   - Step 6(회고) 진입 전에 해당 태스크 목록과 실행 manual(명령/기대 산출물)을 사용자에게 전달한다.
+   - 사용자가 결과(성공/실패, 리포트, 발견 사항)를 공유하면 Manager가 수동으로 DONE 처리하고 done-log에 반영한다.
+   - 사용자 실행 결과에서 코드 이슈가 드러나면 severity 추정 규칙(위 3항)을 적용해 후속 태스크를 등록한다.
 
 ### Step 5: 반복 또는 완료
 - `task-board.md`에 `TODO` 또는 `IN_PROGRESS` 태스크가 남아있으면 Step 3으로 돌아간다.
@@ -271,6 +299,7 @@ Agent tool 호출:
 |-------|----------|--------|------|
 | Coder | agents/coder.md | signal/{project-id}/coder-report.md | 코드 구현, DB 관리 |
 | Tester | agents/tester.md | signal/{project-id}/tester-report.md | 테스트 작성 및 실행 |
+| Reviewer | agents/reviewer.md | signal/{project-id}/reviewer-report.md | Manager 산출물 검증 (Coder/Tester 호출 전 필수) |
 
 ---
 
@@ -290,6 +319,7 @@ Agent tool 호출:
    - `signal/{project-id}/architecture.md` → 빈 템플릿
    - `signal/{project-id}/coder-report.md` → 초기 상태
    - `signal/{project-id}/tester-report.md` → 초기 상태
+   - `signal/{project-id}/reviewer-report.md` → 초기 상태
 4. `signal/registry.md`에 프로젝트를 등록한다.
 5. 오케스트레이션 루프 Step 1부터 진행한다.
 

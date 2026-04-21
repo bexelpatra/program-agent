@@ -19,6 +19,7 @@ signal/
     ├── tester-report.md
     ├── coder-report-TASK-*.md   # 병렬 실행 시
     ├── tester-report-TASK-*.md  # 병렬 실행 시
+    ├── data-quality-log.md      # 원본 데이터 품질 이슈(TASK-DQ-*) append-only 로그
     └── retrospective.md         # 프로젝트 완료 시
 
 projects/
@@ -72,10 +73,15 @@ projects/
 ```markdown
 # Task Board
 
-| ID | Title | Assignee | Status | Priority | Depends On | Created | Updated |
-|----|-------|----------|--------|----------|------------|---------|---------|
-| TASK-001 | 태스크 제목 | coder/tester | TODO | HIGH | - | 2026-03-25T10:00 | 2026-03-25T10:00 |
+| ID | Title | Assignee | Execution | Status | Priority | Depends On | Created | Updated |
+|----|-------|----------|-----------|--------|----------|------------|---------|---------|
+| TASK-001 | 태스크 제목 | coder/tester | agent | TODO | HIGH | - | 2026-03-25T10:00 | 2026-03-25T10:00 |
 ```
+
+### Task ID prefix 규약
+- `TASK-{NNN}` — 일반 태스크
+- `TASK-DQ-{NNN}` — DATA-QUALITY 태스크 (원본 입력 데이터 품질 이슈). `signal/{project-id}/data-quality-log.md`에 병행 기록.
+- 프로젝트 내부에서 `TASK-XXX-YYYY-A`, `TASK-XXX-FIX`, `TASK-XXX-T` 같은 suffix를 쓸 수 있다 (도메인 의존).
 
 ### Status 값
 - `TODO` : 아직 시작하지 않음
@@ -83,6 +89,13 @@ projects/
 - `DONE` : 완료
 - `FAILED` : 실패 (report에 상세 원인 기록)
 - `BLOCKED` : 선행 태스크 미완료로 대기
+
+### Execution 값
+- `agent` : Manager가 서브에이전트(Coder/Tester)를 통해 자동 실행한다 (기본값).
+- `user` : 실 인프라(외부 DB/네트워크/크레덴셜)나 수동 판단이 필요해 사용자가 직접 실행한다.
+  - Manager는 `user` 태스크를 자동 실행하지 않는다.
+  - Manager는 Step 6(회고) 진입 전에 `user` 태스크를 사용자에게 명시적으로 전달한다.
+  - 사용자가 결과를 공유하면 Manager가 수동으로 DONE 처리하고 done-log에 반영한다.
 
 ### Priority 값
 - `HIGH` : 즉시 처리
@@ -113,6 +126,7 @@ agent: coder | tester
 task_id: TASK-001
 status: DONE | FAILED | BLOCKED
 timestamp: 2026-03-25T10:30:00
+severity: blocker | bug | observation   # tester report에서만 필수. 코드 이슈/블로커가 없으면 생략 가능하나, 있으면 반드시 명시.
 ---
 
 ## 결과 요약
@@ -140,6 +154,12 @@ timestamp: 2026-03-25T10:30:00
 - 순차 실행 시 이전 보고 내용은 덮어쓴다 (최신 보고만 유지)
 - 병렬 실행 시 태스크별 report 파일을 사용하여 충돌을 방지한다
 
+### severity 규칙 (tester report 전용)
+- `blocker` : 해당 기능/릴리스가 불가능한 치명 결함. 즉시 후속 태스크 필요.
+- `bug` : 사양에 어긋나는 코드 결함. 후속 태스크 필요.
+- `observation` : 관찰/개선 포인트. Manager 판단에 따라 태스크화 여부 결정.
+- **Manager 규칙**: severity가 `blocker` 또는 `bug` 인 report는 **반드시** 후속 태스크를 task-board.md에 등록한다. `observation`은 retrospective 또는 후속 태스크 중 선택.
+
 ---
 
 ## architecture.md
@@ -166,6 +186,34 @@ Manager가 관리하는 프로젝트 설계 문서. Manager만 수정한다.
 ## 현재 상태
 (전체 진행 현황 요약)
 ```
+
+---
+
+## data-quality-log.md
+
+원본 입력 파일(외부 소스, 사용자 제공 원문 등)의 포맷·escaping·누락 등 **코드 결함이 아닌 데이터 품질 이슈**를 추적하는 append-only 로그.
+`TASK-DQ-*` prefix 태스크가 발생할 때 Manager가 적재한다.
+
+### 파일명 규칙
+- `TASK-DQ-{NNN}`: DATA-QUALITY 태스크 ID. 원본 수정 금지 프로젝트에서도 배치 정정 시점에 일괄 처리 가능하도록 기록만 한다.
+
+### 형식
+
+```markdown
+# Data Quality Log
+
+### TASK-DQ-001 - 2026-04-22T01:00
+- file: projects/my-project/data/source-2020-B.md
+- issue: 원문 Q11에 unescaped `|` 3개 → 파싱 깨짐 (스크립트 row-level fallback으로 복구)
+- impact: Section C 원문 셀 표시 부정확. 핵심 집계에는 영향 없음.
+- detected_by: Tester TASK-175E-MERGE-T
+- resolution: 원본 수정 금지 규정으로 현재는 기록만. 배치 정정 필요.
+```
+
+### 규칙
+- Manager만 기록한다.
+- append-only. 기존 내용 수정/삭제 금지.
+- 해결되면 해당 엔트리 하단에 `- resolved_at: YYYY-MM-DDTHH:MM` + `- resolved_by: TASK-XXX`를 추가 (기존 내용은 유지).
 
 ---
 
