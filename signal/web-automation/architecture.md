@@ -97,13 +97,14 @@ projects/web-automation/
 - 이유: 티스토리(이메일 인증 + 글작성)와 야놀자(Cloudflare + 숙소 예약)의 흐름이 근본적으로 다름
 - 대안: 완전 추상화(비효율적, 억지 추상화)
 
-### 3. Cloudflare 대응 전략 (단계적)
-- 결정: 자체 우회 시도 → 실패 시 capsolver API
-- 이유: 무료 방법 우선 시도 후 유료 fallback
-- 방법:
-  1. playwright-stealth (fingerprint 위장)
-  2. undetected-playwright 또는 브라우저 프로필 재사용
-  3. capsolver API (유료, 최후 수단)
+### 3. Cloudflare 대응 전략 (**연기됨 — 2026-04-22**)
+- 현재 결정: Cloudflare 우회는 capsolver 유료 API 도입 시점까지 보류
+- 이유: playwright-stealth 단독으로는 Cloudflare Turnstile 통과 불가함을 사용자가 확인
+- 영향:
+  - TASK-010 (antibot/cloudflare.py) 제거
+  - Phase 4 (야놀자 전체) BLOCKED 상태로 전환
+  - Phase 3 (티스토리)는 Cloudflare 없이 동작하므로 독립 진행 가능
+- 후속: capsolver 계정/키 확보 시 cloudflare.py 태스크 재등록
 
 ### 4. 결제 제외
 - 결정: 1차 스코프에서 결제 기능 제외
@@ -117,6 +118,10 @@ projects/web-automation/
 
 ---
 
-## 현재 상태
+## 현재 상태 (2026-04-22)
 
-프로젝트 초기화 완료. 태스크 분해 진행 중.
+- Phase 1 (Core Toolkit): TASK-001~006 완료. TASK-007 (테스트) 보류.
+- Phase 2 (인증 + Anti-Bot): TASK-008 (Naver IMAP) **최우선**. TASK-010 (Cloudflare) 제거.
+- Phase 3 (티스토리): 최상위 우선순위 확정. IMAP 완료 후 로그인 → 글쓰기 순.
+- Phase 4 (야놀자): capsolver 도입 시점까지 BLOCKED.
+- 추가 검토 필요: 글쓰기 보조 에이전트 (scope 미정, 사용자 확인 대기).
