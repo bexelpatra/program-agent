@@ -11,7 +11,8 @@
 | TASK-006 | Core - retry.py (재시도 데코레이터 + 에러 핸들링) | coder | DONE | MEDIUM | TASK-001 | 2026-04-13T20:00 | 2026-04-13T20:50 |
 | TASK-007 | Core Toolkit 테스트 (browser, config, telegram, logger, retry) | tester | TODO | HIGH | TASK-002,TASK-003,TASK-004,TASK-005,TASK-006 | 2026-04-13T20:00 | 2026-04-13T20:00 |
 | --- | **Phase 2: 인증 + Anti-Bot** | --- | --- | --- | --- | --- | --- |
-| TASK-008 | auth/naver_imap.py (Naver IMAP 연결 → 인증번호 자동 추출) | coder | TODO | TOP | TASK-001 | 2026-04-13T20:00 | 2026-04-22T00:00 |
+| TASK-008 | auth/naver_imap.py (Naver IMAP 연결 → 인증번호 자동 추출) + settings.yaml naver 섹션 추가 + tests/test_naver_imap.py (mock 기반 단위 테스트) | coder | IN_PROGRESS | TOP | TASK-001 | 2026-04-13T20:00 | 2026-04-22T00:00 |
+| TASK-008-SMOKE | 실계정 연결 스모크 테스트 (WA_NAVER_EMAIL, WA_NAVER_APP_PASSWORD 환경변수로 실제 imap.naver.com:993 연결 → 최근 메일 1건 인증번호 추출 확인) | user | TODO | TOP | TASK-008 | 2026-04-22T00:00 | 2026-04-22T00:00 |
 | TASK-009 | antibot/stealth.py (playwright-stealth 설정 적용) | coder | TODO | MEDIUM | TASK-002 | 2026-04-13T20:00 | 2026-04-22T00:00 |
 | TASK-010 | ~~antibot/cloudflare.py~~ (제거됨: stealth로 CF 우회 불가 확인, capsolver 유료 API 도입 시점까지 보류) | - | REMOVED | - | - | 2026-04-13T20:00 | 2026-04-22T00:00 |
 | TASK-011 | 인증 + stealth 테스트 (naver_imap, stealth) | tester | TODO | HIGH | TASK-008,TASK-009 | 2026-04-13T20:00 | 2026-04-22T00:00 |
@@ -30,3 +31,5 @@
 | TASK-021 | cli.py (CLI 진입점: tistory-login, tistory-write, yanolja-search, yanolja-book) | coder | TODO | MEDIUM | TASK-013,TASK-018 | 2026-04-13T20:00 | 2026-04-13T20:00 |
 | TASK-022 | sites/base.py (BaseSiteWorkflow 인터페이스 정의) | coder | TODO | LOW | TASK-013,TASK-018 | 2026-04-13T20:00 | 2026-04-13T20:00 |
 | TASK-023 | 전체 파이프라인 통합 테스트 | tester | TODO | HIGH | TASK-021 | 2026-04-13T20:00 | 2026-04-13T20:00 |
+| --- | **Phase 6: 티스토리 글쓰기 에이전트 (architecture §6 참조)** | --- | --- | --- | --- | --- | --- |
+| TASK-024 | 글쓰기 에이전트 상세 태스크 분해 (style/seo/image_placer/agent 등) | manager | TODO | LOW | TASK-013 | 2026-04-22T00:00 | 2026-04-22T00:00 |
