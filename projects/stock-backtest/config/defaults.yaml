@@ -1,0 +1,84 @@
+# =============================================================================
+# stock-backtest default configuration
+# -----------------------------------------------------------------------------
+# 단위 표기 규약:
+#   *_bps  : basis points (1bp = 0.01%)
+#   *_ms   : milliseconds
+#   *_sec  : seconds
+#   *_krw  : Korean Won (원)
+# 시장 코드: KR, US, CRYPTO (architecture.md §5, §7 참조)
+# =============================================================================
+
+# ---- 전역 디폴트 -------------------------------------------------------------
+base_currency: USD            # 포트폴리오 평가/리포팅 기준 통화
+market_mode: STOCK            # STOCK | CRYPTO | MIXED (architecture.md §5)
+
+# ---- 거래 비용 (bps = basis points, 1bp = 0.01%) -----------------------------
+# market_overrides에 설정된 시장은 해당 값으로, 미설정 항목은 상위 기본값을 상속한다.
+costs:
+  commission_buy_bps: 15      # 매수 수수료 (기본)
+  commission_sell_bps: 15     # 매도 수수료 (기본)
+  slippage_bps: 5             # 체결 슬리피지 (기본)
+  fx_spread_bps: 20           # 크로스-커런시 리밸런싱 환전 스프레드 (architecture.md §4)
+  market_overrides:
+    KR:
+      commission_buy_bps: 10
+      commission_sell_bps: 28   # 0.18% 증권거래세 포함 대략치
+      slippage_bps: 5
+    US:
+      commission_buy_bps: 5
+      commission_sell_bps: 5
+      slippage_bps: 3
+    CRYPTO:
+      commission_buy_bps: 25
+      commission_sell_bps: 25
+      slippage_bps: 15
+
+# ---- 리밸런싱 ----------------------------------------------------------------
+# frequency: pandas offset alias (D: 매일, W: 주간, ME: 월말, Q: 분기, Y: 연)
+#            또는 'threshold' (비중 차이 기반 리밸런싱)
+# threshold_pct: frequency='threshold'일 때 사용되는 비중 편차 임계값 (예: 0.05 = 5%p)
+rebalance:
+  frequency: ME
+  threshold_pct: null
+
+# ---- 거래 캘린더 (exchange_calendars ISO 코드) -------------------------------
+calendars:
+  KR: XKRX
+  US: XNYS
+  CRYPTO: "24/7"
+
+# ---- 암호화폐 일봉 기준시각 (UTC) --------------------------------------------
+crypto_daily_cutoff_utc: "00:00"
+
+# ---- 세금 (architecture.md §14) ----------------------------------------------
+# profiles[profile] 구조이며 enabled=false이면 세금 무시 (순수 성과 비교용).
+# 국내 ETF 과세 분류는 자산 단위(assets.meta.kr_tax_class)로 관리:
+#   "domestic_equity"  → 매매차익 비과세
+#   "domestic_other"   → 매매차익 배당소득세 15.4%
+#   "overseas"         → 양도소득세 (overseas_* 파라미터 적용)
+tax:
+  enabled: true
+  profile: kr_resident
+  profiles:
+    kr_resident:
+      overseas_capital_gains_rate: 0.22          # 해외주식 양도세율
+      overseas_annual_deduction_krw: 2500000     # 연 기본공제 (KRW)
+      overseas_dividend_rate: 0.154              # 해외배당 원천징수율
+      crypto_enabled: true
+      crypto_capital_gains_rate: 0.22            # 가상자산 양도세율
+      crypto_annual_deduction_krw: 2500000       # 가상자산 연 기본공제 (KRW)
+    none: {}                                     # 세금 비활성 (순수 성과 비교용)
+
+# ---- 수집 파이프라인 (architecture.md §9, §13) -------------------------------
+ingestion:
+  retry_max: 3                                   # 자산 단위 최대 재시도 횟수
+  retry_backoff_seconds: [1, 2, 4]               # 지수 백오프 (sec)
+  rate_limit:
+    yfinance_requests_per_sec: 1.5               # yfinance 초당 요청 상한
+    pykrx_min_interval_ms: 100                   # pykrx 최소 간격 (ms)
+  reject_close_zero_or_null: true                # close=0/null 레코드 insert 거부
+
+# ---- 재현성 ------------------------------------------------------------------
+reproducibility:
+  stale_run_warning: true                        # data_hash 변동 시 STALE 경고

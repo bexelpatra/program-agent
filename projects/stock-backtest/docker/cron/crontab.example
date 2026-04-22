@@ -1,0 +1,40 @@
+# stock-backtest ingestion crontab (example)
+#
+# architecture.md §9 참조:
+#   - KR:     매일 18:00 KST (장 마감 이후, 종가 확정)
+#   - US:     매일 07:00 KST (전일 미 장 마감 후)
+#   - Crypto: 매일 09:00 KST (UTC 00:00 캔들 확정 이후)
+#
+# 사용법:
+#   1) `PROJECT_DIR` 와 `VENV` 경로를 실제 환경에 맞게 수정.
+#   2) 로그 디렉토리(`/var/log/stock_backtest/`)를 미리 생성하고 쓰기 권한 부여.
+#   3) `crontab -e` 로 등록하거나 `/etc/cron.d/stock-backtest` 로 복사.
+#
+# 주의:
+#   - CRON_TZ 를 명시해 호스트 TZ 와 무관하게 KST 기준으로 동작.
+#   - .env 는 `stock_backtest.data.db` 가 load_dotenv 로 읽어주므로 PROJECT_DIR
+#     아래의 .env 를 사용하면 된다. cron 환경변수 오염을 피하기 위해 PATH 는
+#     최소한으로 둔다.
+
+CRON_TZ=Asia/Seoul
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# 환경 변수 (필요 시 수정)
+#   PROJECT_DIR : projects/stock-backtest 체크아웃 경로
+#   VENV_PY     : 해당 프로젝트의 Python 실행파일 (virtualenv 권장)
+#   LOG_DIR     : 로그 저장 디렉토리 (사전 생성)
+
+# m h dom mon dow  command
+
+# KR: 매일 18:00 KST (장 마감 18 시 기준, 여유 포함)
+0 18 * * * cd /path/to/projects/stock-backtest && /path/to/venv/bin/python -m stock_backtest.ingestion.cli --market KR >> /var/log/stock_backtest/kr.log 2>&1
+
+# US: 매일 07:00 KST (전일 미 장 종료 ~06:00 KST 이후)
+0 7 * * * cd /path/to/projects/stock-backtest && /path/to/venv/bin/python -m stock_backtest.ingestion.cli --market US >> /var/log/stock_backtest/us.log 2>&1
+
+# Crypto: 매일 09:00 KST (UTC 00:00 캔들 확정 = KST 09:00)
+0 9 * * * cd /path/to/projects/stock-backtest && /path/to/venv/bin/python -m stock_backtest.ingestion.cli --market CRYPTO >> /var/log/stock_backtest/crypto.log 2>&1
+
+# (선택) 전체 시장 일괄 재수집 — 주말 오전, 갭 복구용
+# 0 10 * * 6 cd /path/to/projects/stock-backtest && /path/to/venv/bin/python -m stock_backtest.ingestion.cli --market ALL >> /var/log/stock_backtest/all.log 2>&1
