@@ -297,9 +297,31 @@ Agent tool 호출:
 
 | Agent | 프롬프트 | Report | 역할 |
 |-------|----------|--------|------|
-| Coder | agents/coder.md | signal/{project-id}/coder-report.md | 코드 구현, DB 관리 |
-| Tester | agents/tester.md | signal/{project-id}/tester-report.md | 테스트 작성 및 실행 |
-| Reviewer | agents/reviewer.md | signal/{project-id}/reviewer-report.md | Manager 산출물 검증 (Coder/Tester 호출 전 필수) |
+| Coder | agents/coder.md | signal/{project-id}/coder-report.md | 코드 구현 (core/data/domain), DB 관리, 백엔드 |
+| Tester | agents/tester.md | signal/{project-id}/tester-report.md | 테스트 작성 및 실행, 클린 아키텍처 위반 감지 |
+| Reviewer | agents/reviewer.md | signal/{project-id}/reviewer-report.md | Manager 산출물 검증 (Coder/Tester/App Porter 호출 전 필수) |
+| App Porter | agents/app-porter.md | signal/{project-id}/app-porter-report.md | 웹→모바일 앱 포팅 (presentation 레이어 전담) |
+
+### App Porter 호출 시점
+- 웹 UI 레퍼런스가 있고 이를 모바일 앱 UI 로 변환하는 태스크에서 호출.
+- 주 대상: `lib/features/*/presentation/` (Flutter 프로젝트의 화면·위젯).
+- Manager는 호출 시 `WEB_REFERENCE_ROOT` (예: `projects/abc-english/web/` 의 관련 HTML/CSS/JS 경로)를 명시한다.
+- Coder 와 병렬 실행 가능: Coder 가 data/domain 을 구현하는 동안 App Porter 가 presentation 을 구현.
+
+**App Porter Agent 호출 시:**
+```
+Agent tool 호출:
+- agents/app-porter.md의 내용을 프롬프트에 포함
+- 프로젝트 경로 명시:
+  - SIGNAL_DIR: signal/{project-id}/
+  - PROJECT_ROOT: projects/{project-id}/
+  - WEB_REFERENCE_ROOT: (Manager가 지정한 웹 UI 소스 경로)
+- 할당된 태스크 정보 전달
+- signal/{project-id}/architecture.md 참조 지시
+- report 파일 경로 지시:
+  - 순차 실행: signal/{project-id}/app-porter-report.md
+  - 병렬 실행: signal/{project-id}/app-porter-report-{TASK-ID}.md
+```
 
 ---
 
@@ -320,6 +342,7 @@ Agent tool 호출:
    - `signal/{project-id}/coder-report.md` → 초기 상태
    - `signal/{project-id}/tester-report.md` → 초기 상태
    - `signal/{project-id}/reviewer-report.md` → 초기 상태
+   - `signal/{project-id}/app-porter-report.md` → 초기 상태 (모바일 앱 프로젝트인 경우)
 4. `signal/registry.md`에 프로젝트를 등록한다.
 5. 오케스트레이션 루프 Step 1부터 진행한다.
 

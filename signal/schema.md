@@ -9,18 +9,21 @@
 
 ```
 signal/
-├── registry.md                  # 프로젝트 목록 (Manager 전용)
-├── schema.md                    # 이 문서 (공용)
-└── {project-id}/                # 프로젝트별 네임스페이스
+├── registry.md                      # 프로젝트 목록 (Manager 전용)
+├── schema.md                        # 이 문서 (공용)
+└── {project-id}/                    # 프로젝트별 네임스페이스
     ├── task-board.md
     ├── done-log.md
     ├── architecture.md
     ├── coder-report.md
     ├── tester-report.md
-    ├── coder-report-TASK-*.md   # 병렬 실행 시
-    ├── tester-report-TASK-*.md  # 병렬 실행 시
-    ├── data-quality-log.md      # 원본 데이터 품질 이슈(TASK-DQ-*) append-only 로그
-    └── retrospective.md         # 프로젝트 완료 시
+    ├── reviewer-report.md
+    ├── app-porter-report.md         # 모바일 앱 프로젝트일 때만
+    ├── coder-report-TASK-*.md       # 병렬 실행 시
+    ├── tester-report-TASK-*.md      # 병렬 실행 시
+    ├── app-porter-report-TASK-*.md  # 병렬 실행 시
+    ├── data-quality-log.md          # 원본 데이터 품질 이슈(TASK-DQ-*) append-only 로그
+    └── retrospective.md             # 프로젝트 완료 시
 
 projects/
 └── {project-id}/                # 프로젝트별 코드 루트
@@ -122,7 +125,7 @@ projects/
 
 ```markdown
 ---
-agent: coder | tester
+agent: coder | tester | app-porter
 task_id: TASK-001
 status: DONE | FAILED | BLOCKED
 timestamp: 2026-03-25T10:30:00
