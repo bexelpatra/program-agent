@@ -1,0 +1,121 @@
+# /api/v1 Bearer token. Leave empty to force override via env.
+# 환경변수 ABC_API_TOKEN 로 override.
+api_token: ""
+
+# ABC News Daily English Study - Configuration (Docker deployment override)
+#
+# Full copy of settings.yaml with only the host/port values needed to reach
+# services running on the Docker host instead of inside the container.
+# Kept as a standalone file (rather than merged at runtime) so learners can
+# `diff config/settings.yaml config/settings.docker.yaml` and see the deltas.
+#
+# Deltas vs settings.yaml:
+#   - elasticsearch.host: localhost        -> host.docker.internal
+#   - llm.ollama.host:    http://localhost -> http://host.docker.internal
+#   - llm.ollama.base_url: http://localhost -> http://host.docker.internal
+#   - web.host:           127.0.0.1        -> 0.0.0.0  (bind inside container)
+#   - web.port:           8081             -> 8000     (gunicorn listens here;
+#                                                       nginx publishes host 8081)
+
+crawling:
+  base_url: "https://www.abc.net.au"
+  program_url: "https://www.abc.net.au/listen/programs/abc-news-daily"
+  request_delay: 1.0          # seconds between requests
+  request_timeout: 30         # seconds
+  user_agent: "ABCEnglishStudy/1.0"
+  max_retries: 3
+
+whisper:
+  model: "base"               # base | small | medium | large
+  language: "en"
+  device: "cuda"              # cpu | cuda
+  output_format: "json"       # json with timestamps
+
+elasticsearch:
+  host: "ethics-es"
+  port: 9200
+  scheme: "http"
+  indices:
+    episodes: "abc-episodes"
+    sentences: "abc-sentences"
+    vocabulary: "abc-vocabulary"
+    expressions: "abc-expressions"
+    user_vocabulary: "abc-user-vocabulary"
+    llm_cache: "abc-llm-cache"
+    notebook_v1: "abc-notebook-v1"
+  bulk_size: 500
+
+llm:
+  provider: "ollama"          # anthropic | ollama
+  anthropic:
+    model: "claude-3-haiku-20240307"
+    max_tokens: 4096
+    batch_size: 10            # sentences per batch
+  ollama:
+    host: "http://host.docker.internal:11434"
+    model: "gemma4:e4b-ctx16384"
+    base_url: "http://host.docker.internal:11434"
+    api_mode: "chat"          # chat (recommended) | generate (legacy)
+    timeout_seconds: 120      # seconds (web lookup default)
+    timeout: 300              # seconds (batch llm_analyzer default, larger models need more time)
+    prompt_version: "v1"
+    batch_size: 5
+    options:                  # Ollama model options
+      num_ctx: 16384          # context window size (matches e4b-ctx16384 variant)
+      temperature: 0.3        # lower = more deterministic (good for JSON output)
+      top_p: 0.9
+    # Fallback to smaller model when 32K context is required (>~5K words):
+    #   model: "gemma4:e2b-ctx32768"  +  num_ctx: 32768
+    prompts:
+      v1:
+        system: "You are an expert English teacher helping Korean learners study English news. Analyze the given term and respond in valid JSON only."
+        user_template: |
+          Term: {term}
+          Context (sentence it appeared in, may be empty): {context}
+
+          Identify the term's type (one of: word, phrasal_verb, idiom, collocation) and explain it in English for an intermediate learner.
+
+          Rules:
+          - If type is "idiom", you MUST include an etymology explaining WHY it came to mean what it means (historical/cultural origin).
+          - If type is "phrasal_verb", explain the particle's role.
+          - Provide 2-3 example sentences (not from the context).
+          - Respond with JSON only, no prose:
+          {{
+            "term": "...",
+            "term_type": "word|phrasal_verb|idiom|collocation",
+            "explanation_en": "...",
+            "etymology": "... or null for non-idioms",
+            "examples": ["...", "...", "..."]
+          }}
+
+web:
+  host: "0.0.0.0"
+  port: 8000
+
+data:
+  audio_dir: "data/audio"
+  transcript_dir: "data/transcripts"
+
+scheduler:
+  enabled: true
+  time: "09:00"             # 24h, KST 기준
+  timezone: "Asia/Seoul"
+  weekdays_only: true
+  log_file: "data/scheduler.log"
+
+spacy:
+  model: "en_core_web_sm"
+  filter_pos:
+    - "DET"       # determiners (a, an, the)
+    - "PRON"      # pronouns
+    - "ADP"       # prepositions
+    - "CCONJ"     # coordinating conjunctions
+    - "SCONJ"     # subordinating conjunctions
+    - "AUX"       # auxiliary verbs
+    - "PUNCT"     # punctuation
+    - "SPACE"     # whitespace
+    - "SYM"       # symbols
+    - "NUM"       # numbers
+    - "PART"      # particles (e.g., 's, n't) - but keep phrasal verb particles for LLM
+  filter_ner:
+    - "PERSON"    # personal names

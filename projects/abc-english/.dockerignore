@@ -1,0 +1,32 @@
+# Python bytecode / caches
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# VCS / editors
+.git
+.gitignore
+.idea
+.vscode
+
+# Tests are not needed in the runtime image
+tests
+
+# Data is mounted as a volume at runtime; don't bake it into the image.
+data/audio
+data/transcripts
+data/scheduler.log
+
+# Archive / local scratch
+archive
+.venv
+venv
+*.egg-info
+
+# Docs
+README.md

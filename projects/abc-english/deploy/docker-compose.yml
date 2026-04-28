@@ -1,0 +1,51 @@
+version: '3.8'
+
+# Learning-purpose deployment stack: nginx (reverse proxy) + gunicorn (FastAPI app).
+# HTTP only, no TLS. External entry point: http://localhost:8081
+#
+# Prerequisites on the host:
+#   - Elasticsearch on localhost:9200
+#   - Ollama on localhost:11434
+# (Containers reach them via host.docker.internal.)
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    # Do NOT publish 8000 to host — only nginx talks to the app.
+    expose:
+      - "8000"
+    extra_hosts:
+      # Works on Linux too (Docker 20.10+). Lets the container reach host services.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Audio + transcripts (read-only — app should not mutate them in prod).
+      - ../data:/app/data:ro
+      # Config directory read-only (settings.docker.yaml is picked up via ABC_CONFIG).
+      - ../config:/app/config:ro
+    environment:
+      - ABC_CONFIG=/app/config/settings.docker.yaml
+    networks:
+      - default
+      - es_net
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      # Host 8081 -> container 80. 8081 avoids conflict with the dev `serve` command.
+      - "8081:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # nginx serves /static/* directly without hitting gunicorn.
+      - ../web/static:/usr/share/nginx/static:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+networks:
+  default:
+  es_net:
+    external: true
+    name: program-agent_default

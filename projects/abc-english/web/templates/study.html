@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}학습 — ABC English{% endblock %}
+
+{% block body_attrs %} data-episode-id="{{ episode_id }}" class="study-body"{% endblock %}
+
+{% block nav_actions %}
+<button id="drawer-toggle"
+        class="btn btn-ghost drawer-toggle"
+        type="button"
+        aria-controls="drawer"
+        aria-expanded="false"
+        title="단어장 토글 (N)">
+  <span class="drawer-toggle-icon" aria-hidden="true">📖</span>
+  <span class="drawer-toggle-label">단어장</span>
+  <span id="drawer-badge" class="drawer-badge" hidden>0</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<section class="page page-study">
+  <div class="study-grid">
+    <div class="study-main">
+      <header class="study-header">
+        <h1 id="study-title" class="study-title">로딩 중…</h1>
+        <div class="study-meta muted">
+          <span id="study-date"></span>
+          <span id="study-dur"></span>
+        </div>
+      </header>
+
+      <div id="player" class="study-player">
+        <audio id="audio"
+               preload="metadata"
+               src="/api/audio/{{ episode_id }}"></audio>
+        <div class="player-row">
+          <button id="btn-play" class="btn btn-primary" type="button" aria-label="재생/일시정지">▶</button>
+          <input id="seek" class="seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="탐색" />
+          <span class="time">
+            <span id="time-cur">0:00</span> / <span id="time-dur">0:00</span>
+          </span>
+        </div>
+        <div class="player-row player-row-tools">
+          <label class="rate-label">
+            배속
+            <select id="rate" aria-label="재생 속도">
+              <option value="0.5">0.5x</option>
+              <option value="0.75">0.75x</option>
+              <option value="1" selected>1.0x</option>
+              <option value="1.25">1.25x</option>
+              <option value="1.5">1.5x</option>
+              <option value="1.75">1.75x</option>
+              <option value="2">2.0x</option>
+            </select>
+          </label>
+          <button id="btn-back" class="btn" type="button" title="뒤로 스킵 (←)">
+            <span id="btn-back-label">-3s</span>
+          </button>
+          <button id="btn-fwd" class="btn" type="button" title="앞으로 스킵 (→)">
+            <span id="btn-fwd-label">+3s</span>
+          </button>
+          <label class="skip-label">
+            스킵
+            <input id="skip-seconds" type="number" min="1" max="30" step="1" value="3" />
+            초
+          </label>
+        </div>
+        <div class="player-row player-row-toggles">
+          <label class="toggle">
+            <input type="checkbox" id="toggle-transcript" checked />
+            전체 스크립트
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-highlight" checked />
+            하이라이트
+          </label>
+          <button id="toggle-helper" class="btn btn-ghost" type="button" aria-controls="study-helper" aria-expanded="false">
+            학습 도우미
+          </button>
+        </div>
+      </div>
+
+      <div id="transcript" class="study-transcript">
+        <p class="muted">스크립트 로딩 중…</p>
+      </div>
+    </div>
+
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <header class="drawer-header">
+        <h2>단어장</h2>
+        <button id="drawer-close" class="btn btn-icon" type="button" aria-label="닫기">×</button>
+      </header>
+      <div class="drawer-toolbar">
+        <input id="drawer-search" type="search" placeholder="단어 검색..." />
+        <span id="drawer-count" class="muted"></span>
+      </div>
+      <div id="drawer-body" class="drawer-body">
+        <p class="muted">아직 추가된 단어가 없습니다.</p>
+      </div>
+    </aside>
+  </div>
+
+  <aside id="study-helper" class="study-helper" hidden aria-label="학습 도우미">
+    <header class="helper-header">
+      <h2>학습 도우미</h2>
+      <div class="helper-filters">
+        <select id="helper-type" aria-label="종류">
+          <option value="all">전체</option>
+          <option value="vocabulary">단어</option>
+          <option value="expression">표현/숙어</option>
+        </select>
+        <select id="helper-difficulty" aria-label="난이도">
+          <option value="all">난이도 전체</option>
+          <option value="hard">어려움 (B2+)</option>
+          <option value="medium">중간</option>
+          <option value="easy">쉬움</option>
+        </select>
+        <button id="helper-close" class="btn btn-icon" type="button" aria-label="닫기">×</button>
+      </div>
+    </header>
+    <div class="helper-body">
+      <div class="helper-meta-bar muted"><span id="helper-count">0개</span></div>
+      <div id="helper-list" class="helper-list">
+        <p class="muted">로딩 중…</p>
+      </div>
+    </div>
+  </aside>
+
+  <div id="lookup-root"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/study.js"></script>
+{% endblock %}
