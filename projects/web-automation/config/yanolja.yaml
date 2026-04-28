@@ -1,0 +1,44 @@
+# 야놀자 자동화 설정
+# Cloudflare 우회 → 이메일 로그인 → 숙소 검색 → 예약 버튼 클릭 → 텔레그램 알림
+
+# 사이트 기본 정보
+site:
+  name: "yanolja"
+  base_url: "https://www.yanolja.com"
+  login_url: "https://www.yanolja.com/login"
+
+# 계정 정보
+account:
+  email: "YOUR_EMAIL_HERE"             # 야놀자 이메일
+  password: "YOUR_PASSWORD_HERE"       # 야놀자 비밀번호
+
+# Cloudflare 우회 설정
+cloudflare:
+  max_wait: 15                         # Cloudflare 챌린지 최대 대기 시간 (초)
+  use_capsolver: false                 # capsolver API 사용 여부 (유료)
+  capsolver_api_key: ""                # capsolver API 키 (use_capsolver가 true일 때 필요)
+
+# 검색 설정
+search:
+  region: ""                           # 검색 지역 (예: "제주", "부산")
+  checkin: ""                          # 체크인 날짜 (YYYY-MM-DD)
+  checkout: ""                         # 체크아웃 날짜 (YYYY-MM-DD)
+  guests: 2                            # 투숙 인원
+  sort_by: "recommendation"            # 정렬 기준 (recommendation, price_low, price_high, rating)
+
+# 예약 필터
+booking_filter:
+  max_price: 0                         # 최대 가격 (0이면 제한 없음)
+  min_rating: 0.0                      # 최소 평점 (0이면 제한 없음)
+  keywords: []                         # 숙소 이름 키워드 필터 (예: ["오션뷰", "풀빌라"])
+
+# 셀렉터 (사이트 UI 변경 시 여기만 수정)
+selectors:
+  login_email_input: ""                # 이메일 입력 필드 셀렉터
+  login_password_input: ""             # 비밀번호 입력 필드 셀렉터
+  login_submit_button: ""              # 로그인 버튼 셀렉터
+  search_region_input: ""              # 지역 검색 입력 셀렉터
+  search_date_picker: ""               # 날짜 선택 셀렉터
+  search_submit_button: ""             # 검색 버튼 셀렉터
+  result_item: ""                      # 검색 결과 항목 셀렉터
+  booking_button: ""                   # 예약 버튼 셀렉터
