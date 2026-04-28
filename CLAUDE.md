@@ -41,12 +41,14 @@ program-agent/
 │       ├── src/
 │       ├── tests/
 │       └── ...
-├── learnings/                         # 블로그 포스팅 원본 (프로젝트 archive 와 분리)
-│   └── {project-id}/
-│       └── {YYYY-MM-DD}-{slug}/
-│           ├── post.md
-│           └── imgs/                  # 선택
 └── archive/
+
+# 별도 위치 (repo 외부)
+/home/jai/learnings/program-agent/    # 블로그 포스팅 원본 (repo 외부, project archive 와 분리)
+└── {project-id}/
+    └── {YYYY-MM-DD}-{slug}/
+        ├── post.md
+        └── imgs/                     # 선택
     └── {date}-{project-id}/
 ```
 
@@ -391,9 +393,10 @@ Agent tool 호출:
 
 ### 저장 위치
 
-- **원본**: `learnings/{project-id}/{YYYY-MM-DD}-{slug}/`
-- **심링크 (자동 업로드 필요 시에만)**: `projects/web-automation/posts/{YYYY-MM-DD}-{project-id}-{slug}` → 원본
+- **원본**: `/home/jai/learnings/program-agent/{project-id}/{YYYY-MM-DD}-{slug}/` (repo 외부)
+- **심링크 (자동 업로드 필요 시에만)**: `projects/web-automation/posts/{YYYY-MM-DD}-{project-id}-{slug}` → 원본 (절대 경로 사용)
 - 심링크 파일명에 `{project-id}` 를 포함해 web-automation/posts/ 안에서도 출처를 식별할 수 있게 한다.
+- 심링크는 절대 경로(`/home/jai/learnings/program-agent/...`)로 만들어야 worktree 위치가 바뀌어도 깨지지 않는다.
 
 ### 파일 포맷 (web-automation `post_loader.py` 검증 규칙)
 
@@ -426,19 +429,19 @@ tags: ["선택", "list"]
    - `category` 후보 (없으면 None)
    - `tags` 후보
    - 이미지 포함 여부 및 파일
-2. `learnings/{project-id}/{YYYY-MM-DD}-{slug}/post.md` 작성. 이미지가 있으면 `imgs/` 에 함께 둔다.
-3. 자동 업로드를 사용자가 원하면 심링크 생성:
+2. `/home/jai/learnings/program-agent/{project-id}/{YYYY-MM-DD}-{slug}/post.md` 작성. 이미지가 있으면 `imgs/` 에 함께 둔다.
+3. 자동 업로드를 사용자가 원하면 심링크 생성 (절대 경로):
    ```bash
-   ln -s ../../../learnings/{project-id}/{YYYY-MM-DD}-{slug} \
+   ln -s /home/jai/learnings/program-agent/{project-id}/{YYYY-MM-DD}-{slug} \
          projects/web-automation/posts/{YYYY-MM-DD}-{project-id}-{slug}
    ```
 4. 실제 업로드는 사용자가 web-automation 러너를 직접 실행한다. Manager 가 자동 실행하지 않는다.
 
 ### 아카이브와의 관계
 
-- `learnings/` 는 **프로젝트 아카이브 대상이 아니다.** `projects/{project-id}/` 와 `signal/{project-id}/` 만 archive 로 이동하고 `learnings/{project-id}/` 는 그대로 유지된다.
-- 따라서 `projects/web-automation/posts/` 의 심링크는 archive 후에도 깨지지 않는다 (타겟이 `learnings/` 이므로).
-- 프로젝트 archive 후에도 학습 내용은 `learnings/{project-id}/` 에서 영구 조회 가능하다.
+- `/home/jai/learnings/program-agent/` 는 repo 외부에 있어 **프로젝트 아카이브와 무관**하다. `projects/{project-id}/` 와 `signal/{project-id}/` 만 archive 로 이동하고 학습 콘텐츠는 그 자리에 그대로 유지된다.
+- 따라서 `projects/web-automation/posts/` 의 심링크는 archive 후에도 깨지지 않는다 (타겟이 외부 절대 경로이므로).
+- 프로젝트 archive 후에도 학습 내용은 `/home/jai/learnings/program-agent/{project-id}/` 에서 영구 조회 가능하다.
 
 ---
 
