@@ -1,6 +1,16 @@
 # 런타임 생성물
 logs/
 
+# 대용량 로컬 데이터 (MP3 / transcript / 오프라인 캐시 등)
+projects/*/data/
+
+# 환경변수·시크릿
+.env
+*.env
+
+# 레거시 아카이브 (git 브랜치로 대체됨)
+archive/
+
 # Python
 __pycache__/
 *.py[cod]
