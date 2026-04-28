@@ -1,0 +1,397 @@
+thinker:
+  id: augustine
+  name: 아우구스티누스
+  name_en: Augustine of Hippo
+  field: western_ethics
+  era: 고대 후기/중세 초기
+  birth_year: 354
+  death_year: 430
+  background: 북아프리카 타가스테 출신. 젊은 시절 마니교에 입문했다가 회의주의, 신플라톤주의를 거쳐 기독교로 개종(386년). 밀라노에서
+    암브로시우스 주교의 영향을 받았으며, 391년 히포의 사제, 395년 히포의 주교가 되었다. 서방 교부철학의 정점으로 중세 스콜라 철학에 결정적
+    영향을 미쳤다.
+  core_philosophy: 신의 은총, 자유의지와 원죄, 악의 결핍이론(privatio boni), 신국론(두 도성론), 조명설(divine
+    illumination). 인간은 스스로 선을 행할 수 없으며 오직 신의 은총으로만 구원받는다고 주장한다.
+  philosophical_journey: 마니교 시기(이원론적 악의 실재 인정) → 신플라톤주의 접촉(악의 결핍이론, 비물질적 실재) → 기독교
+    개종(386년, 밀라노) → 히포 주교(395년) → 펠라기우스 논쟁(자유의지 vs 은총) → 서방 교부철학 완성
+  keywords:
+  - 은총
+  - 원죄
+  - 자유의지
+  - 악의 결핍
+  - 신국론
+  - 조명설
+  - 사랑의 질서
+works:
+- id: augustine-de-libero-arbitrio
+  thinker_id: augustine
+  title: 자유의지론
+  title_original: De Libero Arbitrio
+  year: 395
+  significance: 자유의지의 본질과 악의 기원을 탐구한 저서. 인간이 자유의지로 악을 선택하는 것이 왜 가능한지, 그럼에도 신의 예지가
+    어떻게 성립하는지를 논증한다.
+  key_concepts:
+  - 자유의지
+  - 악의 기원
+  - 신의 예지
+  - 악의 결핍
+- id: augustine-confessiones
+  thinker_id: augustine
+  title: 고백록
+  title_original: Confessiones
+  year: 397
+  significance: 아우구스티누스 자신의 회심 과정을 서술한 자전적 신학서. 내면적 자아 탐구와 신을 향한 여정을 담아 서양 자서전 문학의
+    효시로 불린다. 원죄, 은총, 자유의지 문제를 처음으로 본격 논의한다.
+  key_concepts:
+  - 원죄
+  - 은총
+  - 자유의지
+  - 불안한 마음
+  - 시간론
+- id: augustine-de-trinitate
+  thinker_id: augustine
+  title: 삼위일체론
+  title_original: De Trinitate
+  year: 419
+  significance: 삼위일체 교리를 철학적으로 정초한 저서. 인간의 영혼 구조(기억-지성-의지)에서 삼위일체의 흔적(vestigium Trinitatis)을
+    찾고, 신적 조명에 의한 인식론(조명설)을 체계화한다.
+  key_concepts:
+  - 삼위일체
+  - 조명설
+  - 기억-지성-의지
+  - 신의 형상
+- id: augustine-de-civitate-dei
+  thinker_id: augustine
+  title: 신국론
+  title_original: De Civitate Dei
+  year: 426
+  significance: 로마 함락(410년)에 충격받은 이교도들의 비난에 맞서 기독교 역사철학을 전개한 대작. 신의 도성(Civitas Dei)과
+    지상의 도성(Civitas Terrena)이라는 두 도성의 대립을 축으로 역사와 국가, 사회를 해석한다.
+  key_concepts:
+  - 신국
+  - 지상국
+  - 두 도성
+  - 역사철학
+  - 사랑의 질서
+- id: augustine-de-gratia
+  thinker_id: augustine
+  title: 은총과 자유의지
+  title_original: De Gratia et Libero Arbitrio
+  year: 426
+  significance: 펠라기우스 논쟁의 맥락에서 은총과 자유의지의 관계를 정리한 후기 저서. 인간의 자유의지는 죄로 인해 손상되었기 때문에
+    신의 선행 은총(gratia praeveniens) 없이는 선을 행할 수 없다고 주장한다.
+  key_concepts:
+  - 선행 은총
+  - 자유의지 손상
+  - 펠라기우스 반박
+  - 예정론
+claims:
+- id: augustine-divine-illumination
+  thinker_id: augustine
+  work_id: augustine-de-trinitate
+  source_detail: De Trinitate 제9권, 제14~15권; Confessiones 제10권 12장
+  claim: 인간 정신이 영원한 진리를 인식할 수 있는 것은 신의 조명(divine illumination) 때문이다
+  original_text: ''
+  explanation: 아우구스티누스는 플라톤의 이데아론을 기독교화하여 조명설을 정립했다. 인간이 수학적 진리나 도덕적 진리 같은 영원불변한 진리를
+    인식할 수 있는 것은, 신(로고스, 빛)이 인간 정신을 내부에서 비추어 주기 때문이다. 이는 플라톤의 상기설과 구별된다. 인간은 전생에 이데아를
+    봐서 기억하는 것이 아니라, 지금 이 순간 신의 빛이 정신을 조명하기 때문에 진리를 파악한다.
+  argument: '전제1: 인간은 감각 경험을 초월하는 영원불변한 진리(수, 논리, 도덕 원리)를 인식한다. 전제2: 이런 진리는 감각이나 인간
+    이성 자체에서 유래할 수 없다(가변적 존재는 불변적 진리의 원천이 될 수 없다). 전제3: 따라서 인간 정신 위에서 영원한 진리 자체인 신이
+    인간 정신을 내적으로 비추어 줄 때만 이 인식이 가능하다. 결론: 모든 참된 인식은 신의 조명에 의존한다.'
+  counterpoint: 토마스 아퀴나스는 신학대전(Summa Theologiae I, q.84, a.5)에서 조명설을 수정했다. 아퀴나스는 아우구스티누스의
+    신적 조명 대신 아리스토텔레스의 능동지성 개념을 활용하여, 인간 이성 자체에 내재한 능동지성이 추상화를 통해 보편적 진리를 파악할 수 있다고
+    주장하며 직접적 신적 조명 없이도 인식이 가능하다고 보았다.
+  context: 신플라톤주의의 인식론을 기독교화하는 과정에서 전개된 이론으로, 인간 이성과 신앙의 관계, 철학과 신학의 관계를 논의하는 데 핵심
+    역할을 한다.
+  keywords:
+  - 조명설
+  - divine illumination
+  - 영원한 진리
+  - 신플라톤주의
+  verified: false
+  verification_log: []
+- id: augustine-free-will-grace
+  thinker_id: augustine
+  work_id: augustine-de-libero-arbitrio
+  source_detail: De Libero Arbitrio 전권; De Gratia et Libero Arbitrio 제14~17장
+  claim: 자유의지와 신의 은총은 대립하지 않으며, 은총은 자유의지를 파괴하지 않고 치유하여 완성한다
+  original_text: ''
+  explanation: 아우구스티누스는 자유의지를 부정하지 않는다. 인간은 자유의지를 가졌기 때문에 죄에 대한 책임도 있다. 그러나 자유의지가
+    진정한 자유(선을 향한 자유)를 회복하려면 신의 은총이 필요하다. 은총은 의지에 외부에서 강제로 작용하는 것이 아니라, 의지 내부를 치유하여
+    인간이 스스로 선을 사랑하고 원하게 만든다.
+  argument: '전제1: 진정한 자유는 선택 능력이 아니라 선을 향해 올바로 움직이는 능력이다. 전제2: 원죄로 손상된 의지는 선을 향해 올바로
+    움직이지 못한다. 전제3: 신의 은총은 의지를 치유하여 인간이 선을 자발적으로 사랑하고 선택하게 한다. 결론: 따라서 은총을 받은 의지는 강제된
+    것이 아니라 오히려 더 자유로운 상태에 놓인다.'
+  counterpoint: 토마스 아퀴나스는 신학대전(Summa Theologiae I-II, q.109~114)에서 아우구스티누스의 은총론을 계승하면서도,
+    자연적 이성과 덕의 가능성을 보다 적극적으로 인정하여 은총과 자연의 관계를 '은총은 자연을 파괴하지 않고 완성한다(Gratia non tollit
+    naturam sed perficit)'로 정식화했다.
+  context: 악의 책임 소재를 신에게 돌릴 수 없다는 신정론적 요구와, 은총 없이는 선이 불가능하다는 신학적 요구를 동시에 만족시키기 위해
+    아우구스티누스가 정교하게 다듬은 논증이다.
+  keywords:
+  - 자유의지
+  - 은총
+  - 의지 치유
+  - 진정한 자유
+  verified: false
+  verification_log: []
+- id: augustine-grace-necessity
+  thinker_id: augustine
+  work_id: augustine-de-gratia
+  source_detail: De Gratia et Libero Arbitrio, 제1~17장; De Civitate Dei 제22권
+  claim: 인간은 원죄로 손상된 의지 때문에 신의 선행 은총(gratia praeveniens) 없이는 선을 행할 수 없다
+  original_text: ''
+  explanation: 아우구스티누스는 원죄 이후 인간의 자유의지는 소멸된 것이 아니라 손상(vulnerata)되었다고 본다. 인간은 여전히 선택할
+    수 있지만, 그 선택이 진정으로 선을 향하려면 신의 은총이 먼저 움직여야 한다(선행 은총). 은총은 강제하는 것이 아니라 의지를 치유하고 올바른
+    방향으로 이끈다.
+  argument: '전제1: 원죄 이전의 인간(posse non peccare)은 죄를 짓지 않을 수 있었다. 전제2: 원죄 이후 인간(non
+    posse non peccare)은 죄를 짓지 않을 수 없는 상태로 떨어졌다. 전제3: 이 상태에서 신의 선행 은총이 의지를 먼저 치유하고
+    움직일 때만 인간은 선을 향해 자유롭게 선택할 수 있다. 결론: 따라서 구원은 인간 의지의 단독 노력이 아니라 신의 은총과 인간 의지의 협력(cooperatio)으로
+    이루어진다.'
+  counterpoint: 펠라기우스는 이 주장이 신의 불공평함을 함축한다고 반박했다. 만약 은총 없이 선을 행할 수 없다면, 은총을 받지 못한
+    사람은 죄를 피할 수 없으니 신이 그를 불공평하게 창조한 것이라는 논리다. 후대에 칼뱅(Calvin)은 기독교 강요(Institutio Christianae
+    Religionis, 1536/1559, 제3권 21~24장)에서 아우구스티누스의 은총론을 더욱 극단화하여 이중 예정론(double predestination)을
+    주장했다.
+  context: 펠라기우스 논쟁에서 '인간은 자신의 힘으로 선을 행할 수 있다'는 펠라기우스의 주장에 맞서, 은총의 선행성과 불가결성을 논증하기
+    위해 전개되었다.
+  keywords:
+  - 은총
+  - 선행 은총
+  - gratia praeveniens
+  - 의지 손상
+  - 펠라기우스 논쟁
+  verified: false
+  verification_log: []
+- id: augustine-ordo-amoris
+  thinker_id: augustine
+  work_id: augustine-de-civitate-dei
+  source_detail: De Civitate Dei 제15권 22장; De Doctrina Christiana 제1권 27~28장
+  claim: 덕은 사랑의 올바른 질서(ordo amoris)이며, 모든 것을 그 존재 가치에 맞게 사랑하는 것이 선이다
+  original_text: Virtus est ordo amoris
+  explanation: 아우구스티누스에게 덕은 아리스토텔레스처럼 이성적 습관이 아니라 '사랑의 올바른 질서'다. 신을 최고로 사랑하고, 이웃을
+    자신처럼 사랑하며, 사물은 사용(uti)하되 누림(frui)의 대상으로 삼지 않는 것이 올바른 사랑의 질서다. 이 질서가 전도될 때, 즉 신
+    대신 피조물을 최고로 사랑할 때 악과 불행이 생긴다.
+  argument: '전제1: 모든 것은 그 존재의 등급(신 > 영혼 > 물질)에 따라 다른 가치를 가진다. 전제2: 덕 있는 삶이란 각 것을 그
+    가치에 합당하게 사랑하는 삶, 즉 사랑의 질서(ordo amoris)가 바로 선 삶이다. 전제3: 신은 최고의 선이므로 가장 최우선적으로 사랑받아야
+    하고, 피조물은 신을 향한 사랑 안에서 바르게 사랑받아야 한다. 결론: 악덕은 사랑 자체의 결여가 아니라 사랑의 방향이 잘못된 것(전도된 사랑)에서
+    비롯된다.'
+  counterpoint: 막스 셸러(Max Scheler)는 그의 저서 '공감의 본질과 형식들(Wesen und Formen der Sympathie)'과
+    '윤리학에서의 형식주의(Der Formalismus in der Ethik)'에서 아우구스티누스의 ordo amoris 개념을 현상학적으로
+    재해석하면서, 사랑의 질서가 사전에 정해진 위계가 아니라 가치를 직접 지향하는 감정적 지향성에서 드러난다고 보았다.
+  context: 아우구스티누스 윤리학의 핵심 개념으로, 그의 덕론과 두 도성론, 행복론을 하나로 묶는 토대가 된다.
+  keywords:
+  - 사랑의 질서
+  - ordo amoris
+  - 덕
+  - uti와 frui
+  - 행복
+  verified: false
+  verification_log: []
+- id: augustine-original-sin
+  thinker_id: augustine
+  work_id: augustine-confessiones
+  source_detail: Confessiones 제1권 7장; De Civitate Dei 제14권 1~28장
+  claim: 아담의 타락으로 인한 원죄(peccatum originale)는 모든 인류에게 전달된다
+  original_text: ''
+  explanation: 아담과 하와가 에덴동산에서 신의 명령을 어기고 금지된 열매를 먹은 '원죄'는 단순히 그들 개인의 죄가 아니라, 성적 욕망(concupiscentia)을
+    통해 모든 후손에게 유전된다. 이 원죄로 인해 인간의 의지는 손상되었고, 무지와 욕망에 종속된 상태에 놓이게 되었다.
+  argument: '전제1: 아담은 신에게 완전한 자유의지를 부여받았으나, 그것을 남용해 불순종을 선택했다. 전제2: 이 불순종의 결과로 인간
+    본성이 부패했고(concupiscentia), 이는 출생을 통해 모든 인류에게 전달된다. 전제3: 따라서 모든 인간은 태어날 때부터 신에게서
+    분리된 상태, 즉 원죄 상태에 있다. 결론: 인간은 자신의 노력만으로는 이 죄의 상태에서 벗어날 수 없으며, 신의 은총이 반드시 필요하다.'
+  counterpoint: 펠라기우스(Pelagius)는 원죄의 유전을 부정하고, 아담의 죄는 단지 나쁜 모범을 보여준 것일 뿐이며 각 인간은 자신의
+    자유의지로 선을 행할 능력을 완전히 보유하고 있다고 주장했다. 이 논쟁은 카르타고 공의회(418년)에서 펠라기우스주의가 정죄되고 교황 조시무스의
+    Epistola tractoria(418년)로 확정되면서 아우구스티누스의 입장이 정통으로 확인되었다. 에페소 공의회(431년)에서는 주로 네스토리우스주의를
+    다루었으나 이전의 결정을 간접적으로 재확인하였다.
+  context: 펠라기우스 논쟁(411~430년)에서 인간의 자연적 선함을 주장하는 펠라기우스에 맞서 원죄의 보편성과 은총의 필요성을 옹호하기
+    위해 체계화되었다.
+  keywords:
+  - 원죄
+  - peccatum originale
+  - concupiscentia
+  - 인간 본성의 타락
+  verified: false
+  verification_log: []
+- id: augustine-privatio-boni
+  thinker_id: augustine
+  work_id: augustine-de-libero-arbitrio
+  source_detail: De Libero Arbitrio, 제2~3권; Confessiones 제7권 12장
+  claim: 악은 독립적 실체가 아니라 선의 결핍(privatio boni)이다
+  original_text: Neque enim malum aliqua substantia est, sed privatio boni [아우구스티누스
+    사상의 학계 통용 요약 정식화; cf. Confessiones 7.12, De Civitate Dei 11.9]
+  explanation: 아우구스티누스는 마니교의 이원론(선과 악이 동등한 두 실체)을 거부하고, 신플라톤주의에서 배운 통찰을 기독교 신학에 접목했다.
+    악은 그 자체로 존재하는 실체가 아니라 존재해야 할 선이 결여된 상태다. 마치 어둠이 빛의 부재이듯, 악은 선의 부재다.
+  argument: '전제1: 신은 모든 것을 선하게 창조했다. 전제2: 신이 창조한 것은 선하다는 점에서 존재이고, 악은 그것의 결여이다. 전제3:
+    결여는 실체가 아니라 실체의 부족함(결핍)이다. 결론: 따라서 악은 독립적 실체가 없고, 선이 있어야 할 자리에 선이 없는 상태(privatio
+    boni)에 불과하다.'
+  counterpoint: 마니교도들은 악의 실체성을 주장하며 아우구스티누스의 결핍이론이 악의 현실적 파괴력을 과소평가한다고 비판했다. 토마스 아퀴나스는
+    신학대전(Summa Theologiae I, q.48)에서 결핍이론을 수용하면서도, 악이 '인과적 힘'을 가질 수 있는지를 보다 정밀하게 분석했다.
+  context: 마니교에서 기독교로 개종한 아우구스티누스가 '전능하고 선한 신이 왜 악을 허용하는가'라는 신정론(theodicy) 문제를 해결하기
+    위해 정초한 이론이다.
+  keywords:
+  - 악의 결핍
+  - privatio boni
+  - 신정론
+  - 마니교 비판
+  verified: false
+  verification_log: []
+- id: augustine-time-theory
+  thinker_id: augustine
+  work_id: augustine-confessiones
+  source_detail: Confessiones 제11권 14~28장
+  claim: 시간은 객관적 외부 질서가 아니라 영혼의 연장(distentio animi)이며, 과거·현재·미래는 모두 현재 안에 존재한다
+  original_text: 'inde mihi visum est nihil esse aliud tempus quam distentionem; sed
+    cuius rei, nescio, et mirum si non ipsius animi [축약형: distentio animi; Conf. XI.26.33]'
+  explanation: 아우구스티누스는 '시간이란 무엇인가? 아무도 묻지 않으면 나는 알지만, 설명하려 하면 모른다'는 유명한 말로 시간의 역설을
+    제시한다. 과거는 더 이상 없고 미래는 아직 없으니, 엄밀히 말하면 존재하는 것은 현재뿐이다. 그러나 우리는 과거(기억)·현재(주의)·미래(기대)를
+    현재의 영혼 안에서 동시에 경험한다. 시간은 외부 사물의 속성이 아니라 영혼의 연장이다.
+  argument: '전제1: 과거는 이미 사라졌고 미래는 아직 없으므로, 엄밀히 존재하는 것은 현재뿐이다. 전제2: 그러나 우리는 과거를 기억(memoria)으로,
+    미래를 기대(expectatio)로, 현재를 주의(contuitus)로 경험한다. 전제3: 이 세 가지는 모두 영혼의 현재적 작용이다. 결론:
+    시간은 외부 세계에 있는 것이 아니라 영혼(animus) 안에 있으며, 시간의 길이는 영혼의 연장(distentio animi)이다.'
+  counterpoint: 아리스토텔레스는 자연학(Physica 제4권 10~14장)에서 시간을 운동의 수(numerus motus)로 정의하며
+    시간이 외부 자연 세계의 속성이라고 보았다. 이에 비해 아우구스티누스는 시간을 내면화하여 주관적·심리적 시간론을 제시했다는 차이가 있다.
+  context: 신에게 기도하는 형식으로 쓰인 고백록 제11권에서, 창조 이전에 신이 무엇을 하고 있었는가라는 질문에 답하면서 시간의 본질을 탐구한다.
+  keywords:
+  - 시간론
+  - distentio animi
+  - 기억
+  - 기대
+  - 현재
+  verified: false
+  verification_log: []
+- id: augustine-two-cities
+  thinker_id: augustine
+  work_id: augustine-de-civitate-dei
+  source_detail: De Civitate Dei 제14권 28장; 제15권 1~4장
+  claim: 역사는 신의 도성(Civitas Dei)과 지상의 도성(Civitas Terrena), 두 도성의 투쟁으로 이루어진다
+  original_text: 'Fecerunt itaque civitates duas amores duo: terrenam scilicet amor
+    sui usque ad contemptum Dei, caelestem vero amor Dei usque ad contemptum sui'
+  explanation: 두 도성은 지리적 국가가 아니라 사랑의 방향으로 구별된다. 신의 도성은 신에 대한 사랑으로, 지상의 도성은 자기 자신에
+    대한 사랑으로 세워진다. 지상의 국가와 교회가 각 도성과 일치하지는 않는다. 로마도 교회도 이 두 도성이 섞여 있다. 역사의 종말에 최후 심판으로
+    두 도성이 완전히 분리된다.
+  argument: '전제1: 모든 인간의 행위는 사랑(amor)에서 나온다. 전제2: 사랑의 방향은 신을 향하거나(ordo amoris 실현)
+    자기 자신을 향하거나(ordo amoris 전도) 둘 중 하나다. 전제3: 신을 향한 사랑으로 묶인 공동체가 신의 도성이고, 자기 사랑으로
+    묶인 공동체가 지상의 도성이다. 결론: 현세 역사는 이 두 도성이 혼재하는 순례의 시간이며, 최후 심판에서 완전히 분리된다.'
+  counterpoint: 오로시우스(Paulus Orosius)는 이교도들을 반박하는 역사(Historiarum Adversum Paganos,
+    418년)에서 아우구스티누스의 역사관을 이어받아 기독교 제국 로마를 신의 도성과 동일시하는 방향으로 단순화했으나, 아우구스티누스 자신은 지상의
+    어떤 국가도 신의 도성과 동일시하는 것을 거부했다.
+  context: 서고트족의 로마 약탈(410년) 이후 로마 함락이 기독교 때문이라는 이교도들의 비난에 맞서, 기독교적 역사 해석과 국가론을 제시하기
+    위해 집필되었다.
+  keywords:
+  - 신국
+  - 지상국
+  - 두 도성
+  - 사랑의 질서
+  - 역사철학
+  verified: false
+  verification_log: []
+keywords:
+- id: augustine-kw-civitas-dei
+  term: 신국
+  term_en: Civitas Dei
+  definition: 신에 대한 사랑으로 세워진 공동체(도성). 지상의 어떤 국가나 교회와도 완전히 일치하지 않는 초월적 공동체다. 지상의 도성(Civitas
+    Terrena, 자기 사랑으로 세워진 공동체)과 역사 안에서 공존하며, 최후 심판 때 완전히 분리된다.
+  thinker_id: augustine
+  work_id: augustine-de-civitate-dei
+  related_terms:
+  - 지상국
+  - 두 도성
+  - 사랑의 질서
+  - 역사철학
+- id: augustine-kw-gratia
+  term: 은총
+  term_en: Gratia
+  definition: 신이 인간에게 무상으로 베푸는 구원의 힘. 아우구스티누스에 따르면 원죄로 손상된 인간 의지는 신의 선행 은총(gratia
+    praeveniens) 없이는 선을 향해 움직일 수 없다. 은총은 의지를 강제하는 것이 아니라 내부에서 치유하여 인간이 자발적으로 선을 사랑하게
+    만든다.
+  thinker_id: augustine
+  work_id: augustine-de-gratia
+  related_terms:
+  - 원죄
+  - 자유의지
+  - 선행 은총
+  - 펠라기우스 논쟁
+- id: augustine-kw-illuminatio
+  term: 조명설
+  term_en: Illuminatio (Divine Illumination)
+  definition: 인간이 영원한 진리를 인식할 수 있는 것은 신의 내적 조명(illuminatio divina) 때문이라는 인식론적 이론.
+    플라톤의 이데아론을 기독교화한 것으로, 신은 진리 자체로서 인간 정신 내부를 비추어 불변하는 진리의 인식을 가능케 한다.
+  thinker_id: augustine
+  work_id: augustine-de-trinitate
+  related_terms:
+  - 신플라톤주의
+  - 영원한 진리
+  - 플라톤 이데아
+  - 인식론
+- id: augustine-kw-liberum-arbitrium
+  term: 자유의지
+  term_en: Liberum Arbitrium
+  definition: 스스로 선택할 수 있는 의지의 능력. 아우구스티누스는 자유의지를 악의 책임 근거로 인정하지만, 원죄 이후 자유의지는 손상되어
+    신의 은총 없이는 진정한 선을 선택할 수 없다고 본다. 은총은 자유의지를 파괴하는 것이 아니라 치유하여 완성한다.
+  thinker_id: augustine
+  work_id: augustine-de-libero-arbitrio
+  related_terms:
+  - 은총
+  - 원죄
+  - 의지 손상
+  - 펠라기우스
+- id: augustine-kw-ordo-amoris
+  term: 사랑의 질서
+  term_en: Ordo Amoris
+  definition: 모든 것을 그 존재 가치와 등급에 맞게 사랑하는 것. 아우구스티누스에 따르면 덕은 사랑의 올바른 질서(virtus est
+    ordo amoris)이다. 신을 최고로, 이웃을 자신처럼 사랑하고, 피조물은 사용(uti)하되 누림(frui)의 대상으로 삼지 않는 것이
+    올바른 질서다.
+  thinker_id: augustine
+  work_id: augustine-de-civitate-dei
+  related_terms:
+  - 신국
+  - 두 도성
+  - 덕
+  - uti와 frui
+  - 행복론
+- id: augustine-kw-original-sin
+  term: 원죄
+  term_en: Peccatum Originale
+  definition: 아담과 하와의 에덴 불순종으로 시작된 죄. 성적 욕망(concupiscentia)을 통해 모든 인류에게 유전된다. 이로 인해
+    인간 본성은 무지와 욕망에 예속된 상태가 되었고, 구원을 위해 신의 은총이 반드시 필요하다.
+  thinker_id: augustine
+  work_id: augustine-confessiones
+  related_terms:
+  - 은총
+  - 자유의지
+  - concupiscentia
+  - 아담의 타락
+- id: augustine-kw-privatio-boni
+  term: 악의 결핍
+  term_en: Privatio Boni
+  definition: 악은 선의 결핍(결여)이지 독립적 실체가 아니라는 이론. 마니교의 이원론(선-악이 동등한 두 실체)을 거부하고, 신플라톤주의의
+    통찰을 기독교화한 것이다. 악은 어둠이 빛의 부재이듯 선이 있어야 할 자리에 선이 없는 상태다.
+  thinker_id: augustine
+  work_id: augustine-de-libero-arbitrio
+  related_terms:
+  - 신정론
+  - 마니교 비판
+  - 악의 기원
+  - 선의 결여
+relations:
+- from_thinker: augustine
+  to_thinker: thomas_aquinas
+  type: influenced
+  description: 아우구스티누스의 은총론, 원죄론, 악의 결핍이론, 신국론이 중세 스콜라 철학의 토대가 되었다. 토마스 아퀴나스는 신학대전
+    전반에 걸쳐 아우구스티누스를 권위자로 빈번히 인용하면서도 아리스토텔레스적 자연신학과 종합했다.
+  evidence: Summa Theologiae 전반에서 아우구스티누스 인용이 매우 빈번함
+- from_thinker: augustine
+  to_thinker: pelagius
+  type: criticized
+  description: 아우구스티누스는 인간이 자신의 자유의지로 선을 행할 수 있다는 펠라기우스의 주장을 논박했다. 원죄의 유전과 선행 은총의
+    필요성을 논증하여 펠라기우스주의가 411~431년 공의회에서 이단으로 정죄되는 데 결정적 역할을 했다.
+  evidence: De Gratia et Libero Arbitrio; De Natura et Gratia 등 펠라기우스 논박서 다수
+- from_thinker: augustine
+  to_thinker: luther
+  type: influenced
+  description: 루터는 아우구스티누스 수도회 소속이었으며, 아우구스티누스의 은총론과 원죄론에서 종교개혁의 신학적 근거를 찾았다. '오직
+    은총(sola gratia)'의 원리는 아우구스티누스의 은총 신학에 직접적으로 맞닿아 있다.
+  evidence: 루터는 자신의 신학적 전환점에서 아우구스티누스의 저서들을 집중적으로 읽었다고 증언했다
+- from_thinker: plato
+  to_thinker: augustine
+  type: influenced
+  description: 플라톤의 이데아론, 영혼의 상승, 선의 이데아 개념이 신플라톤주의(플로티누스)를 거쳐 아우구스티누스에게 전달되었다. 조명설은
+    플라톤의 이데아론을 기독교화한 것이며, 악의 결핍이론도 신플라톤주의적 존재론에 기반한다.
+  evidence: Confessiones 제7권에서 아우구스티누스는 신플라톤주의 철학서(플로티누스의 엔네아데스)를 읽은 경험을 서술한다

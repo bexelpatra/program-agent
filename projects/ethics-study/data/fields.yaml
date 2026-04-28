@@ -1,0 +1,17 @@
+fields:
+  - id: western_ethics
+    name: 서양윤리
+    description: 고대 그리스부터 현대까지의 서양 윤리 사상
+    order: 1
+  - id: eastern_ethics
+    name: 동양윤리
+    description: 유교, 불교, 도가 등 동양의 윤리 사상
+    order: 2
+  - id: political_philosophy
+    name: 정치철학
+    description: 정의, 국가, 권리 등 정치적 윤리 사상
+    order: 3
+  - id: moral_development
+    name: 도덕발달론
+    description: 도덕성 발달 이론 (피아제, 콜버그, 길리건 등)
+    order: 4

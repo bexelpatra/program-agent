@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}기출 문서 — 윤리 학습 가이드{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+  <h1 class="page-title">기출 문서 (study-guide · coverage)</h1>
+  <p class="page-subtitle">총 <strong>{{ total }}</strong>개 연도·슬롯</p>
+</section>
+
+<div class="exam-grid">
+  {% for entry in entries %}
+  <a class="exam-card" href="/exam/{{ entry.key }}">
+    <h2 class="exam-card-year">{{ entry.year }}</h2>
+    <p class="exam-card-slot">전공{{ entry.slot }}</p>
+    <p class="exam-card-links">
+      <span class="exam-card-link">study-guide</span>
+      <span class="exam-card-sep">·</span>
+      <span class="exam-card-link">coverage</span>
+    </p>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

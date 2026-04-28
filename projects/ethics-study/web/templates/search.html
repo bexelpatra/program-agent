@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if q %}{{ q }} 검색 결과{% else %}통합 검색{% endif %} — 윤리 학습 가이드
+{% endblock %}
+
+{% block content %}
+
+<!-- ── 검색 헤더 ── -->
+<div class="page-hero">
+  {% if q %}
+    <h1 class="page-title">
+      "<span class="search-query-text">{{ q }}</span>" 검색 결과
+    </h1>
+    <p class="page-subtitle">
+      {% if total > 0 %}
+        총 {{ total }}건 — 주장 {{ claims|length }}건 / 키워드 {{ keywords|length }}건 / 저작 {{ works|length }}건
+      {% else %}
+        검색 결과가 없습니다.
+      {% endif %}
+    </p>
+  {% else %}
+    <h1 class="page-title">통합 검색</h1>
+    <p class="page-subtitle">검색어를 위쪽 검색창에 입력하세요.</p>
+  {% endif %}
+</div>
+
+<!-- ── 빈 검색어 안내 ── -->
+{% if not q %}
+<div class="search-empty-state">
+  <div class="search-empty-icon">🔍</div>
+  <h2>무엇을 찾고 계신가요?</h2>
+  <p>사상가 이름, 개념, 키워드를 검색해 보세요.</p>
+  <p class="search-empty-examples">예: <code>덕</code> / <code>정의</code> / <code>행복</code> / <code>자연법</code></p>
+</div>
+
+<!-- ── 검색 결과 없음 ── -->
+{% elif total == 0 %}
+<div class="search-empty-state">
+  <div class="search-empty-icon">😔</div>
+  <h2>"{{ q }}"에 대한 결과가 없습니다</h2>
+  <p>다른 검색어로 다시 시도해 보세요.</p>
+  <a href="/" class="btn-back">← 사상가 목록으로</a>
+</div>
+
+<!-- ── 검색 결과 ── -->
+{% else %}
+
+<!-- 결과 탭 -->
+<div class="search-tabs tabs">
+  <button class="tab-btn active" data-section="all">
+    전체 <span class="tab-count">{{ total }}</span>
+  </button>
+  {% if claims %}
+  <button class="tab-btn" data-section="claims">
+    주장 <span class="tab-count">{{ claims|length }}</span>
+  </button>
+  {% endif %}
+  {% if keywords %}
+  <button class="tab-btn" data-section="keywords">
+    키워드 <span class="tab-count">{{ keywords|length }}</span>
+  </button>
+  {% endif %}
+  {% if works %}
+  <button class="tab-btn" data-section="works">
+    저작 <span class="tab-count">{{ works|length }}</span>
+  </button>
+  {% endif %}
+</div>
+
+<!-- ── 주장(Claims) 결과 ── -->
+{% if claims %}
+<section class="search-section" data-section="claims">
+  <h2 class="section-heading">
+    <span class="section-badge badge-claim">주장</span>
+    {{ claims|length }}건
+  </h2>
+  <div class="search-result-list">
+    {% for item in claims %}
+    <article class="search-result-card">
+      <div class="result-card-header">
+        <span class="result-type-badge badge-claim">주장</span>
+        <a href="/thinker/{{ item.thinker_id }}" class="result-thinker-link">
+          {{ item.thinker_name or item.thinker_id }}
+        </a>
+        {% if item.source_detail %}
+        <span class="result-source">{{ item.source_detail }}</span>
+        {% endif %}
+      </div>
+      <p class="result-claim-text">
+        {% if item._highlight_claim %}
+          {{ item._highlight_claim | safe }}
+        {% else %}
+          {{ item.claim }}
+        {% endif %}
+      </p>
+      {% if item._highlight_explanation %}
+      <p class="result-explanation">
+        {{ item._highlight_explanation | safe }}
+      </p>
+      {% elif item.explanation %}
+      <p class="result-explanation">{{ item.explanation[:150] }}{% if item.explanation|length > 150 %}…{% endif %}</p>
+      {% endif %}
+      {% if item.keywords %}
+      <ul class="card-keywords result-keywords">
+        {% for kw in item.keywords %}
+        <li class="kw-tag">{{ kw }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ── 키워드 결과 ── -->
+{% if keywords %}
+<section class="search-section" data-section="keywords">
+  <h2 class="section-heading">
+    <span class="section-badge badge-keyword">키워드</span>
+    {{ keywords|length }}건
+  </h2>
+  <div class="search-result-list">
+    {% for item in keywords %}
+    <article class="search-result-card">
+      <div class="result-card-header">
+        <span class="result-type-badge badge-keyword">키워드</span>
+        <a href="/thinker/{{ item.thinker_id }}" class="result-thinker-link">
+          {{ item.thinker_name or item.thinker_id }}
+        </a>
+      </div>
+      <p class="result-term">
+        {{ item.term }}
+        {% if item.term_en %}
+        <span class="result-term-en">{{ item.term_en }}</span>
+        {% endif %}
+      </p>
+      <p class="result-definition">
+        {% if item._highlight_definition %}
+          {{ item._highlight_definition | safe }}
+        {% else %}
+          {{ item.definition[:200] if item.definition else '' }}{% if item.definition and item.definition|length > 200 %}…{% endif %}
+        {% endif %}
+      </p>
+      {% if item.related_terms %}
+      <ul class="card-keywords result-keywords">
+        {% for rt in item.related_terms %}
+        <li class="kw-tag">{{ rt }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<!-- ── 저작 결과 ── -->
+{% if works %}
+<section class="search-section" data-section="works">
+  <h2 class="section-heading">
+    <span class="section-badge badge-work">저작</span>
+    {{ works|length }}건
+  </h2>
+  <div class="search-result-list">
+    {% for item in works %}
+    <article class="search-result-card">
+      <div class="result-card-header">
+        <span class="result-type-badge badge-work">저작</span>
+        <a href="/thinker/{{ item.thinker_id }}" class="result-thinker-link">
+          {{ item.thinker_name or item.thinker_id }}
+        </a>
+        {% if item.year %}
+        <span class="result-source">{{ item.year }}</span>
+        {% endif %}
+      </div>
+      <p class="result-work-title">
+        {{ item.title }}
+        {% if item.title_original %}
+        <span class="result-term-en">{{ item.title_original }}</span>
+        {% endif %}
+      </p>
+      {% if item._highlight_significance %}
+      <p class="result-definition">{{ item._highlight_significance | safe }}</p>
+      {% elif item.significance %}
+      <p class="result-definition">{{ item.significance[:200] }}{% if item.significance|length > 200 %}…{% endif %}</p>
+      {% endif %}
+      {% if item.key_concepts %}
+      <ul class="card-keywords result-keywords">
+        {% for kc in item.key_concepts %}
+        <li class="kw-tag">{{ kc }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% endif %}{# end total > 0 #}
+
+<script>
+(function () {
+  var tabBtns = document.querySelectorAll(".search-tabs .tab-btn");
+  var sections = document.querySelectorAll(".search-section");
+
+  if (!tabBtns.length) return;
+
+  tabBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      tabBtns.forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+
+      var target = btn.dataset.section;
+      sections.forEach(function (sec) {
+        if (target === "all" || sec.dataset.section === target) {
+          sec.style.display = "";
+        } else {
+          sec.style.display = "none";
+        }
+      });
+    });
+  });
+})();
+</script>
+
+{% endblock %}
