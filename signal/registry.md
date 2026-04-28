@@ -1,15 +1,15 @@
 # Project Registry
 
-각 프로젝트는 `project/{id}` 브랜치와 `/home/jai/pa-{id}` worktree 로 운영된다. archive 개념은 사용하지 않는다 — 더 이상 작업 안 하는 프로젝트는 단순히 worktree 를 만들지 않으면 된다.
+각 프로젝트는 `project/{id}` 브랜치와 `/home/jai/pa/{id}` worktree 로 운영된다. archive 개념은 사용하지 않는다 — 더 이상 작업 안 하는 프로젝트는 단순히 worktree 를 만들지 않으면 된다.
 
 | ID | Name | Branch | Worktree | Created |
 |----|------|--------|----------|---------|
-| ethics-study | 윤리 임용시험 학습 가이드 | `project/ethics-study` | `/home/jai/pa-ethics-study` | 2026-03-25 |
-| starcraft-record | 스타크래프트 전적 관리 도구 | `project/starcraft-record` | `/home/jai/pa-starcraft-record` | 2026-04-13 |
-| web-automation | 웹 업무 자동화 (티스토리, 야놀자) | `project/web-automation` | `/home/jai/pa-web-automation` | 2026-04-13 |
-| abc-english | ABC News Daily 영어 학습 시스템 | `project/abc-english` | `/home/jai/pa-abc-english` | 2026-04-13 |
-| stock-backtest | 시계열 기반 자산배분·계절성 백테스팅 플랫폼 | `project/stock-backtest` | `/home/jai/pa-stock-backtest` | 2026-04-14 |
-| abc-english-app | ABC English 모바일 앱 (Flutter, Android 주력) | `project/abc-english-app` | `/home/jai/pa-abc-english-app` | 2026-04-22 |
+| ethics-study | 윤리 임용시험 학습 가이드 | `project/ethics-study` | `/home/jai/pa/ethics-study` | 2026-03-25 |
+| starcraft-record | 스타크래프트 전적 관리 도구 | `project/starcraft-record` | `/home/jai/pa/starcraft-record` | 2026-04-13 |
+| web-automation | 웹 업무 자동화 (티스토리, 야놀자) | `project/web-automation` | `/home/jai/pa/web-automation` | 2026-04-13 |
+| abc-english | ABC News Daily 영어 학습 시스템 | `project/abc-english` | `/home/jai/pa/abc-english` | 2026-04-13 |
+| stock-backtest | 시계열 기반 자산배분·계절성 백테스팅 플랫폼 | `project/stock-backtest` | `/home/jai/pa/stock-backtest` | 2026-04-14 |
+| abc-english-app | ABC English 모바일 앱 (Flutter, Android 주력) | `project/abc-english-app` | `/home/jai/pa/abc-english-app` | 2026-04-22 |
 
 ## Legacy 브랜치 (worktree 없음, 작업 미진행)
 

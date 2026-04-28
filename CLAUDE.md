@@ -51,7 +51,7 @@ program-agent/
 
 # Worktree 레이아웃 (실제 디스크)
 /home/jai/program-agent/              # main 브랜치 (framework 전용)
-/home/jai/pa-{project-id}/            # 각 project/{id} 브랜치 worktree
+/home/jai/pa/{project-id}/            # 각 project/{id} 브랜치 worktree
 ```
 
 ### 경로 변수
@@ -72,9 +72,9 @@ program-agent/
 | Worktree 경로 | 브랜치 | 역할 |
 |----------------|--------|------|
 | `/home/jai/program-agent` | `main` | framework 전용 (CLAUDE.md, agents/, hooks/, signal/{schema,registry,execution-log}) |
-| `/home/jai/pa-{project-id}` | `project/{project-id}` | 단일 프로젝트의 코드 + signal |
+| `/home/jai/pa/{project-id}` | `project/{project-id}` | 단일 프로젝트의 코드 + signal |
 
-세션 시작은 항상 해당 worktree 디렉토리에서: `cd ~/pa-stock-backtest && claude` 식으로.
+세션 시작은 항상 해당 worktree 디렉토리에서: `cd ~/pa/stock-backtest && claude` 식으로.
 
 ### 공유 자원 규칙
 
@@ -355,7 +355,7 @@ Agent tool 호출:
    git add . && git commit -m "project/{project-id}: initial scaffold"
    git push -u origin project/{project-id}
    git checkout main   # main worktree 자체는 main 으로 복귀
-   git worktree add /home/jai/pa-{project-id} project/{project-id}
+   git worktree add /home/jai/pa/{project-id} project/{project-id}
    ln -s /home/jai/.claude/projects/-home-jai-program-agent \
          /home/jai/.claude/projects/-home-jai-pa-{project-id}
    ```
@@ -368,7 +368,7 @@ Agent tool 호출:
    - `signal/{project-id}/reviewer-report.md` → 초기 상태
    - `signal/{project-id}/app-porter-report.md` → 초기 상태 (모바일 앱 프로젝트인 경우)
 4. main 의 `signal/registry.md`에 새 브랜치 행을 추가한다.
-5. 사용자에게 `cd /home/jai/pa-{project-id} && claude` 로 새 세션을 시작하라고 안내한다.
+5. 사용자에게 `cd /home/jai/pa/{project-id} && claude` 로 새 세션을 시작하라고 안내한다.
 6. 새 세션에서 오케스트레이션 루프 Step 1부터 진행한다.
 
 ---
@@ -379,7 +379,7 @@ Agent tool 호출:
 
 | 상태 | 표현 |
 |------|------|
-| 작업 중 | `project/{id}` 브랜치 + `/home/jai/pa-{id}` worktree 둘 다 존재 |
+| 작업 중 | `project/{id}` 브랜치 + `/home/jai/pa/{id}` worktree 둘 다 존재 |
 | 잠시 비활성 | 브랜치는 있고 worktree 없음. 재개 시 `git worktree add` |
 | 더 이상 작업 안함 | 브랜치만 origin 에 보존, worktree 만들지 않음 |
 
@@ -387,13 +387,13 @@ Agent tool 호출:
 
 ```bash
 # 일시 중단: worktree 만 제거 (브랜치는 origin 에 그대로)
-git worktree remove /home/jai/pa-{id}
+git worktree remove /home/jai/pa/{id}
 
 # 재개
-git worktree add /home/jai/pa-{id} project/{id}
+git worktree add /home/jai/pa/{id} project/{id}
 ln -sfn /home/jai/.claude/projects/-home-jai-program-agent \
         /home/jai/.claude/projects/-home-jai-pa-{id}
-cd /home/jai/pa-{id} && claude
+cd /home/jai/pa/{id} && claude
 ```
 
 ### 종료 (선언만, 데이터 보존)
