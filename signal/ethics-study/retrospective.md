@@ -82,3 +82,80 @@
 ## 검토 요청
 
 Manager(사용자)에게 위 6건의 파이프라인 개선 제안 중 적용할 항목을 선택받아 순차 반영한다. **사용자 승인 없이 프레임워크 파일을 수정하지 않는다** (CLAUDE.md Step 6 규정).
+
+---
+
+## Phase 6 TASK-176 TOP10 MISS 회고 (2026-04-22)
+
+- 작성: 2026-04-22 (TASK-176-10-FIX DONE 직후)
+- 대상: TASK-176-01 ~ TASK-176-10-FIX (jinul·blasi·durkheim·hoffman·bandura·pettit·singer·turiel·moore·narvaez 10인 ES 등록)
+- 진행 방식: Reviewer → Coder(Opus) → Tester 순차, bug 발견 시 Manager inline FIX
+
+### 프로젝트 요약 (TOP10 부분 회고)
+
+- **총 iteration**: 10회 (사상가 1인 = 1 iteration = Coder + Tester + 경우에 따라 FIX)
+- **등록 총계**: thinker 10 + works ≥14 + claims ≥80 + keywords ≥90 + relations ≥30 (누계)
+- **Bug 궤적**: jinul(0) · blasi(0) · durkheim(0) · hoffman(0) · bandura(0) · **pettit(3)** · **singer(1)** · turiel(0) · moore(0) · **narvaez(3)** — 모두 `severity=bug · Coder 영어 trademark 원문 0-hit`
+- **Manager inline FIX**: 3회 (TASK-176-06-FIX pettit 4건 / TASK-176-07-FIX singer 1건 / TASK-176-10-FIX narvaez 6위치 3종)
+- **DATA-QUALITY 기록**: TASK-DQ-001~005 누계 (특히 narvaez 는 DQ-005 3항목: canonical map BLK 누락 · 생년 1952 vs 1955 상충 · 영어 토큰 0-hit 다수)
+
+### 잘 된 점
+
+1. **3단 방어선의 안정적 작동**: 부정 키워드 safelist(Manager 스펙) + Coder 자기검증 루프(`grep -oE '\([A-Za-z][^)]*\)'`) + Manager/Tester 독립 재검증. turiel·moore 2연속 0 bug 는 3단 방어 성숙도의 증거.
+2. **Manager 대필 프로토콜** (TASK-176-08 turiel, Coder rate limit 대응): Coder 스크립트 본문 무수정 유지 + Manager 가 실행·검증·coder-report.md frontmatter note 필드에 "대필 사유" 명시. 가용성 이슈에 대한 재현 가능 회복 절차 확립.
+3. **Reviewer 선행 검증**: moore TASK-176-09 에서 Reviewer 1차 NEEDS_REVISION(4건 off-by-1 수치 오기) → Manager 재작성 → 2차 PASS. Coder 호출 전 스펙 품질 확보.
+4. **Tester severity 규칙 100% 준수**: bug 판정된 TASK-176-06-T / -07-T / -10-T 전수 Manager inline FIX 태스크로 전환. 관찰(observation) 은 retrospective/DQ log 로 이월 — CLAUDE.md Step 4 규정과 일치.
+5. **Bug 개선 궤적**: pettit(3) → singer(1) 로 66% 감소. Manager 스펙에 "부정 키워드 사전 리스트" + "pettit 교훈 재강조" 추가한 효과 확증 (TASK-176-07 done-log).
+
+### 문제점
+
+1. **narvaez 3 bug 재발** (핵심 문제): turiel·moore 2연속 0 bug 이후 직후 iteration 에서 bug 3건 재발. 개선 궤적이 정점에서 후퇴.
+2. **Coder 자기검증 regex 한계**: 현행 `grep -oE '\([A-Za-z][^)]*\)' script.py` 는 **괄호 안 영어 토큰만** 캐치. narvaez 에서 놓친 패턴:
+   - **JSON 필드 값**: `"term_en": "safety ethic"` (L852·L872 keyword 필드) — 괄호 구문 아님
+   - **본문 괄호 밖 영어 phrase**: `(safety ethic)`·`(engagement ethic)` 이 coverage 에 한글 "안전 윤리"·"관여 윤리" 는 풍부하지만 영어 phrase 자체는 0 hit (Coder 가 괄호로 병기했어도 coverage 역grep 에 case-sensitive 0)
+   - **대소문자 변이**: `moral foundations theory` (소문자 L1198) vs coverage 의 `Moral Foundations Theory` (TitleCase 5 hits). case-sensitive 표준 미준수
+3. **Coder report 의 Step C "유지된 영어 토큰" 표가 오판**: narvaez coder-report L51 은 `engagement ethic=3` · `safety ethic=2` · `moral foundations theory=2` 로 기재했으나, Tester 실측은 0 hit. Coder 가 coverage md 가 아닌 **자신의 script 본문**에 역grep 했을 가능성 — 자기검증 대상 파일 혼동.
+4. **Manager 대필 프로토콜 미명문화**: turiel 에서 전례만 존재. agents/coder.md / CLAUDE.md 에 "Coder rate limit 시 Manager 대필 절차" 미기재 → 재현 가능성 의존.
+
+### 파이프라인 개선 제안 (TOP10 기준)
+
+#### 제안 7: agents/coder.md 자기검증 2단계 규약 추가 (narvaez 대응)
+
+- **대상 파일**: `agents/coder.md` (원문/입력 인용 규칙 섹션 L83-87 뒤)
+- **현재**: L87 "새로 쓴 고유명·한자·trademark를 원문 파일에 역grep해 0건이면 제거·대체한다" — 일반론만. regex 패턴·대상 범위(괄호 내/외·JSON 필드) 미명시.
+- **제안**: 2단계 자기검증 명문화:
+  - Step 1: `grep -oE '\([A-Za-z][^)]*\)' script.py | sort -u` (괄호 안 토큰)
+  - Step 2 (신규): 괄호 밖 TitleCase 영어 phrase + JSON 필드 값(`term_en` 등) 전수 추출
+    - `grep -oE '"term_en"\s*:\s*"[^"]*"' script.py`
+    - `grep -oE '[A-Z][a-z]+(\s+[A-Za-z][a-z]+){1,5}' script.py`
+    - 각 토큰 coverage/*.md 역grep, **case-sensitive 엄수**
+  - 0-hit 토큰은 제거·한글 단독·TitleCase 대체 중 택1
+- **이유**: narvaez 3 bug 의 근본 원인은 Step 1 regex 만으로는 JSON 필드 값과 본문 괄호 밖 phrase 를 포착하지 못함. Step 2 추가 시 narvaez 3 bug 모두 저장 전 포착 가능.
+- **상세 초안**: `signal/ethics-study/proposal-coder-md-amendment-TASK-176-10.md` 참조.
+
+#### 제안 8: Manager 대필 프로토콜 명문화
+
+- **대상 파일**: `agents/coder.md` 또는 `CLAUDE.md` (서브에이전트 호출 규칙 섹션)
+- **현재**: turiel TASK-176-08 에서 Coder rate limit 발생 시 Manager 가 대필한 전례만 존재. 성문 규정 없음.
+- **제안**: 대필 허용 조건·절차·note 필드 명시 형식을 표준화.
+  - 조건: Coder(특정 모델) 호출 실패·rate limit·세션 만료
+  - 절차: (a) Coder 스크립트 본문은 무수정 유지 (b) Manager 가 실행·자기검증·coder-report.md 작성 (c) frontmatter `note:` 필드에 "Manager 대필 (사유: ...)" 명시
+  - Tester verdict 에 영향 없음 (본문 수정 없으므로)
+- **이유**: 대필은 재현 가능한 회복 절차다. 명문화하지 않으면 다음 세션에서 혼란.
+
+#### 제안 9: Coder report 의 "유지된 영어 토큰" 표 검증 대상 명시
+
+- **대상 파일**: `agents/coder.md` 원문/입력 인용 규칙 섹션
+- **현재**: narvaez coder-report L51 이 coverage 역grep 결과를 script 본문 grep 으로 오기재 가능성. "유지된 토큰" 표의 hit count 기준이 모호.
+- **제안**: report 포맷에 "hit count 대상 = **coverage md 파일 전수 (case-sensitive)**" 를 명시하는 필드 주석 추가. Coder 가 자기 script 에 grep 하는 실수 방지.
+- **이유**: narvaez 이후 혼동 재발 방지.
+
+### 후속 과제 (TOP10 외부)
+
+- **Phase 7 이후**: TOP10 외 Section D 잔여 사상가(green_th·viroli 등 부분 해소 BLK 대상) 추가 등록 검토.
+- **DQ 배치 정정**: TASK-DQ-005 (narvaez canonical map BLK 누락 + 생년 상충 + 영어 토큰 0-hit) 일괄 반영.
+- **agents/coder.md 수정 제안** (제안 7 근거 diff): `signal/ethics-study/proposal-coder-md-amendment-TASK-176-10.md` 초안 완료 — 사용자 승인 대기.
+
+### 검토 요청
+
+사용자에게 제안 7·8·9 적용 여부를 확인받는다. 특히 **제안 7** (Coder 자기검증 2단계) 은 narvaez 3 bug 재발의 직접 원인 차단책으로 우선 순위 높음. **사용자 승인 없이 `agents/coder.md` 는 수정하지 않는다** (CLAUDE.md Step 6).

@@ -156,3 +156,72 @@ projects/web-automation/
 - `src/writer/seo.py` — SEO 최적화
 - `src/writer/image_placer.py` — 이미지 배치 제안
 - `prompts/writer.md` — 에이전트 프롬프트 템플릿
+
+---
+
+## 7. 폴더 기반 임시저장 자동화 (Phase 7)
+
+### 목적
+사용자가 지정된 폴더(`posts/{YYYY-MM-DD}-{slug}/`) 에 마크다운 글과 이미지를 넣어두면, 자동으로 티스토리에 임시저장(`/manage/drafts`) 한다. 사용자는 관리자 페이지에서 draft 를 열어 확인하고 직접 '완료'(발행) 한다.
+
+### 계층 구분 (중요)
+- Phase 3 `src/sites/tistory/writer.py` 는 **UI 기반** (Playwright 가 TinyMCE 에디터에 직접 타이핑/클릭). 단일 글 수동 조작에 적합.
+- Phase 7 `src/tistory_post/*` 는 **API 기반** (page.evaluate + fetch 로 `/manage/post/attach.json` + `/manage/drafts` 직접 호출). 대량/반복 자동화에 적합하며 이미지 중간 위치 배치가 자유로움.
+- 두 계층은 **같은 BrowserManager 세션**을 공유 (로그인 1회 → 양쪽 사용).
+
+### 입력 규격
+```
+posts/2026-04-22-hello-world/
+├── post.md              # YAML frontmatter + 본문 (with ${N}/${filename} 마커)
+├── imgs/                # 이미지 전용 서브폴더 (권장). 있으면 loader 는 여기만 읽는다.
+│   ├── 1.png            # ${1} 로 참조 (imgs/ 내 사전순 1번째)
+│   ├── 2.png
+│   └── hero.jpg         # ${hero.jpg} 로 파일명 직접 참조
+├── .draft_id            # runtime: tistory draftSequence 저장 (재실행 시 업데이트)
+├── .published           # runtime: 완료 마커 (존재하면 skip)
+├── .orphan.log          # runtime: 업로드 실패로 남은 orphan 이미지 JSONL
+└── .error               # runtime: 최근 실패 traceback + phase JSON
+```
+
+**이미지 수집 규칙**: `{folder}/imgs/` 가 존재하면 **그 안의 이미지만**, 없으면 `{folder}/` 바로 아래 (하위 호환).
+
+**post.md 포맷** (YAML frontmatter + markdown body):
+```markdown
+---
+title: "제목"
+category: "메모"              # tistory 카테고리명 (실측 존재해야)
+tags: ["태그1", "태그2"]
+---
+
+본문 첫 문단. 이미지는 ${1}
+
+다음 사진: ${hero.jpg}
+```
+
+### 마커 파싱 규칙
+- `${N}` (양의 정수, 1-based) → 폴더 내 이미지 사전순 N번째.
+- `${filename.ext}` → 해당 이름 파일.
+- `${}` / `${0}` / 음수 / 부재 파일 → ValueError.
+- 동일 마커 중복 허용 (같은 이미지 재사용).
+- 고아 이미지 (마커 미참조) 허용 (warning 로그).
+
+### 핵심 결정
+- **이미지 먼저 업로드** → 매크로 수집 → 본문 마커 치환 → draft 생성 순 (atomic).
+- **멱등성**: `.draft_id` 저장 후 재실행 시 `draftSequence` 로 덮어쓰기 (API 지원 실측 — probe §2).
+- **이미지 삭제 API 부재** 확정 (probe §3). 실패 시 orphan 은 `.orphan.log` 기록 + 사용자 수동 정리.
+- `&` → `&amp;` HTML escape 는 UploadedImage.macro 조립 시점 (image_uploader) 에서 완료.
+
+### 구현 위치
+- `src/tistory_post/models.py` — 공통 dataclass (LoadedPost, Marker, UploadedImage, DraftPayload, RunResult, PartialUploadError)
+- `src/tistory_post/post_loader.py` — 폴더 파싱 (frontmatter + body + 마커 매핑)
+- `src/tistory_post/image_uploader.py` — `/manage/post/attach.json` 직접 호출 + 매크로 조립
+- `src/tistory_post/category_fetcher.py` — `#category-list` DOM 에서 name↔id 맵 추출
+- `src/tistory_post/post_builder.py` — 마커 치환 + markdown→HTML + DraftPayload 조립
+- `src/tistory_post/post_saver.py` — `/manage/drafts` 직접 호출
+- `src/tistory_post/post_runner.py` — end-to-end orchestration + 에러 롤백 + 마커 파일 관리
+- `scripts/smoke_tistory_post.sh` / `.py` — E2E 스모크 러너
+- `posts/{YYYY-MM-DD}-{slug}/` — 사용자 입력 폴더 (git-ignore 권장)
+
+### 의존성
+- `Pillow>=10.0.0` — 이미지 width/height 추출 + 샘플 PNG 생성.
+- `markdown>=3.5` — 마크다운 → HTML 변환 (extensions=[extra, nl2br]).

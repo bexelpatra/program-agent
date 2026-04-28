@@ -1,130 +1,98 @@
 ---
 agent: coder
-task_id: TASK-040
+task_id: TASK-176-10
 status: DONE
-timestamp: 2026-04-12T14:00:00
+timestamp: 2026-04-22T12:30:00
 ---
 
 ## 결과 요약
+TOP10 MISS 10번째 사상가 나바에즈(Darcia Narvaez, 1952~) 를 ES 에 등록 완료. `insert_narvaez.py` 신규 작성 후 실행하여 thinker 1명, works 2건, claims 9건, keywords 13건, relations 4건 등록. 자기검증 루프로 coverage 0-hit 영어 토큰 6건 제거 및 부정 키워드 7건 본문 0 확증. BLK-175E-2016A-004(2016-A Q9 IEE/4과정모형/7기술/윤리전문가), BLK-175E-2024A-002(2024-A Q6 삼원 윤리 안전·관여·상상·관여궁박) 모두 해소.
 
-TASK-040 에피쿠로스 검증 결과 반영 완료.
-TASK-039(Tester 검증) 결과에서 심각 이슈 없음 확인 후, epicurus-claim-001 ~ epicurus-claim-008 전 8건에 `verified: true` 및 `verification_log` 처리 완료.
+## 변경된 파일
+- projects/ethics-study/scripts/insert_narvaez.py (신규, 실행 완료)
 
-## 처리 결과
+## ES 등록 결과
+| 인덱스 | id | 결과 |
+|--------|----|------|
+| ethics-fields | moral_development | 이미 존재 (재사용) |
+| ethics-thinkers | narvaez | created |
+| ethics-works | narvaez-neurobiology-morality-2014 | created |
+| ethics-works | narvaez-postconventional-moral-thinking-1999 | created |
+| ethics-claims | narvaez-claim-001 ~ 009 | created (9건) |
+| ethics-keywords | kw-narvaez-* | created (13건) |
+| ethics-relations | rest-rel-002 | 기존 재사용 (skip) |
+| ethics-relations | rel-kohlberg-narvaez-influenced-2 | created |
+| ethics-relations | rel-haidt-narvaez-compared-3 | created |
+| ethics-relations | rel-hoffman-narvaez-compared-4 | created |
 
-| 작업 | 대상 건수 | 결과 |
-|------|-----------|------|
-| verified:true 업데이트 | 8건 | 전건 updated (version 2) |
-| 재조회 확인 | 8건 | 전건 verified=true 확인 |
+### curl 실측 검증 (localhost:9200)
+- `ethics-thinkers/_doc/narvaez` → found=true, name=`나바에즈 (Darcia Narvaez)`, birth_year=1952, field=`moral_development`
+- `ethics-works?q=thinker_id:narvaez` 총 2건
+- `ethics-claims?q=thinker_id:narvaez` 총 9건
+- `ethics-keywords?q=thinker_id:narvaez` 총 13건
+- `ethics-relations` (narvaez 관련) 총 4건 (최초 실행 시 중복 5건 발생 → `rel-rest-narvaez-influenced-1` 삭제 + 스크립트에 idempotency 로직 추가)
 
-### 업데이트 상세
+## 자기검증 루프 결과
 
-모든 claim에 아래 내용이 반영됨:
-- `verified: true`
-- `verification_log: [{date: "2026-04-12", result: "verified", method: "tester-agent-opus"}]`
+### Step A: 영어 괄호 토큰 추출
+`grep -oE '\([A-Za-z][^)]*\)' insert_narvaez.py | sort -u` → 약 60개 영어 토큰 추출 (코드 literal 제외).
 
-대상 ID 목록:
-- epicurus-claim-001 ~ epicurus-claim-008 (8건 전부)
+### Step B: 0-hit 토큰 제거 (6건)
+| 토큰 | coverage 역grep | 처리 |
+|------|-----------------|------|
+| `Just Community` | 0 hit | L741 "콜버그 정의공동체 접근은" 으로 수정 |
+| `automaticity` | 0 hit | L621 "자동화된 숙달이" 로 수정 |
+| `embodied cognition` | 0 hit | L185 "체화된 인지 관점을" 로 수정 |
+| `engagement distress` | 0 hit | L165·L415·L433·L883 4곳 한글 단독(관여 궁박)으로 수정 + L1080 keyword `term_en` 공란 처리 |
+| `inductive discipline` | 0 hit | L444·L1222 "유도·귀납 훈육" 한글 단독으로 수정 |
+| `social intuitionism` | 0 hit | L1204 "사회직관주의와" 로 수정 |
 
-### 정책 결정 사항
+### Step C: 유지된 영어 토큰 (모두 coverage hit 확인)
+`Bebeau`=1, `Thoma`=23, `Koenig`=1, `Defining Issues Test`=6, `Four Component Model`=8, `Four Process Model`=2, `empathic distress`=9, `empathic over-arousal`=1, `engagement ethic`=3, `ethic of imagination`=2, `safety ethic`=2, `ethical expert`=4, `ethical novice`=1, `intuitive, automatic processing`=1, `moral foundations theory`=2, `moral foundations`=5, `moral schema`=3, `common morality`=3, `dual-process theory`=5, `dual-process`=2, `postconventional`=3, `Neo-Kohlbergian`=2, `triune brain`=9, `Triune Ethics Theory`=3, `Paul MacLean`=28, `Integrative Ethical Education`=10, `Darcia Narvaez`=13, `D. Narvaez`=21, `Narvaez`=다수, `Lawrence Kohlberg`·`Martin Hoffman`·`Jonathan Haidt`·`James Rest`=다수.
 
-- `lucretius-de-rerum-natura`의 `thinker_id: epicurus` 설정은 **정책상 유지** — 2차 자료를 원사상가에 귀속하는 기존 패턴(Bentham/Mill 사례)과 동일하며, 내용이 정확하므로 수정 불필요
+### Step D: 부정 키워드 7건 본문 0 확증
+| 부정 키워드 | `grep -c` |
+|-------------|-----------|
+| `moral expertise` | 0 |
+| `expertise theory` | 0 |
+| `전문성 이론` | 0 |
+| `adaptive ethical` | 0 |
+| `적응적 윤리` | 0 |
+| `communal imagination` | 0 |
+| `공동체적 상상` | 0 (docstring 나열 제거 + L481 quoted ellipsis 단축) |
 
-## 이슈/블로커
+## 블로커 해소 확인
+- **BLK-175E-2016A-004** (2016-A Q9 narvaez 미등록) → 해소.
+  - Q9 정답 핵심어 "통합적 윤리 교육 모델(IEE)", "4과정 모형", "7가지 윤리적 기술", "윤리적 전문가" 모두 claim-005/006 에 verbatim 포함 (coverage/2016-A.md L120·L122 인용).
+- **BLK-175E-2024A-002** (2024-A Q6 narvaez 삼원 윤리 미등록) → 해소.
+  - Q6 (나) ㉠ 안전 윤리 → claim-002, ㉡ 관여 윤리 → claim-003, ㉢ 관여 궁박/공감적 고통 → claim-003 explanation, ㉣ 상상의 윤리 → claim-004 (coverage/2024-A.md L107 verbatim 인용).
 
-없음.
-
-## 다음 제안
-
-- 에피쿠로스 데이터 및 관련 thinker 전체 현황 재확인 (democritus thinker 문서 존재 여부 등)
-
----
-
-<!-- 이전 태스크 보고서 (TASK-038) -->
----
-agent: coder
-task_id: TASK-038
-status: DONE
-timestamp: 2026-04-12T12:00:00
----
-
-## 결과 요약
-
-TASK-038 에피쿠로스(Epicurus) 데이터 ES 직접 입력 완료.
-`scripts/insert_epicurus.py`를 작성하여 thinker 1건, works 5건, claims 8건, keywords 7건, relations 4건(신규)을 입력하고 전수 확인했다.
-
-## 입력 결과 요약
-
-| 인덱스 | 입력 건수 | 상태 |
-|--------|-----------|------|
-| ethics-thinkers | 1건 (epicurus) | created |
-| ethics-works | 5건 | created |
-| ethics-claims | 8건 | created |
-| ethics-keywords | 7건 | created |
-| ethics-relations | 4건 (신규) | created |
-
-## 입력 상세
-
-### ethics-thinkers
-- `epicurus`: 에피쿠로스, 고대 그리스·헬레니즘, 기원전 341~270
-
-### ethics-works (5건)
-| ID | 원제 | 연도 |
-|----|------|------|
-| epicurus-letter-menoeceus | Letter to Menoeceus | 기원전 ~300 |
-| epicurus-letter-herodotus | Letter to Herodotus | 기원전 ~300 |
-| epicurus-principal-doctrines | Principal Doctrines (Kyriai Doxai) | 기원전 ~290 |
-| epicurus-vatican-sayings | Vatican Sayings | 기원전 ~280 |
-| lucretius-de-rerum-natura | De Rerum Natura (루크레티우스) | 기원전 55 |
-
-### ethics-claims (8건) — argument+counterpoint+original_text 전부 포함
-| ID | 주제 | 출처 |
-|----|------|------|
-| epicurus-claim-001 | 쾌락주의 — 최고선은 쾌락(헤도네) | Letter to Menoeceus 128-129 |
-| epicurus-claim-002 | 정적 쾌락 vs 동적 쾌락 구분 | Letter to Menoeceus 131-132; KD 3 |
-| epicurus-claim-003 | 욕구의 세 가지 구분 | Letter to Menoeceus 127-128 |
-| epicurus-claim-004 | 죽음 공포 극복 — "죽음은 우리에게 아무것도 아니다" | Letter to Menoeceus 124-125 |
-| epicurus-claim-005 | 신들에 대한 무두려움 — 신들은 인간사에 관여하지 않음 | Letter to Menoeceus 123-124; KD 1 |
-| epicurus-claim-006 | 우정(philia)이 행복에 가장 크게 기여함 | KD 27; Vatican Sayings VS 52 |
-| epicurus-claim-007 | 정의의 계약론적 기초 — 상호 불해(KD 31-33) | Principal Doctrines KD 31-33 |
-| epicurus-claim-008 | 클리나멘과 자유의지 | De Rerum Natura II, 216-293 |
-
-### ethics-keywords (7건)
-- epicurus-kw-001: 아타락시아 (Ataraxia)
-- epicurus-kw-002: 아포니아 (Aponia)
-- epicurus-kw-003: 헤도네 (Hedone)
-- epicurus-kw-004: 클리나멘 (Clinamen)
-- epicurus-kw-005: 정원 (The Garden, κῆπος)
-- epicurus-kw-006: 주요 학설 (Kyriai Doxai)
-- epicurus-kw-007: 상호 불해 (Mutual Non-harm)
-
-### ethics-relations (4건 신규)
-| ID | 방향 | 유형 |
-|----|------|------|
-| relation-democritus-epicurus | democritus → epicurus | influenced |
-| relation-epicurus-lucretius | epicurus → lucretius | influenced |
-| relation-epicurus-mill | epicurus → mill | influenced |
-| relation-epicurus-bentham | epicurus → bentham | influenced |
-
-※ `relation-bentham-epicurus`(bentham→epicurus, influenced_by)는 기존에 입력된 관계로 유지됨.
-
-## 전수 확인 결과
-
-- thinker: 1건 확인 (name_en=Epicurus, era=고대 그리스·헬레니즘)
-- works: 5건 확인
-- claims: 8건 확인 — 전 건 argument=True, counterpoint=True, original_text=True, verified=False
-- keywords: 7건 확인
-- relations: 5건 확인 (신규 4건 + 기존 1건)
-
-## 생성된 파일
-
-- `scripts/insert_epicurus.py` (신규 작성)
+## 설계 결정
+- **canonical name**: `나바에즈` 채택 (19 hits 다수). `나르바에즈` 는 2026-B 해설 인용 맥락에서만 사용 (10 hits).
+- **birth_year=1952**: TASK 지정값. 2026-B 해설은 "1955-" 로 기재 (DATA-QUALITY 이슈로 보고).
+- **field=moral_development**: 기존 field 재사용 (kohlberg/hoffman/haidt/turiel/rest 등 9명 공유). 신규 field 생성 금지 규약 준수.
+- **relations 4건**: rest(영향) + kohlberg(영향) + haidt(비교) + hoffman(비교). MacLean·Bebeau·Thoma·Koenig 는 ES 미등록이라 relations 제외, 텍스트 내 언급만 유지.
+- **idempotency 로직**: rest→narvaez 영향 관계는 레스트 등록 시점에 이미 `rest-rel-002` id 로 생성되었음. 중복 방지 로직을 `insert_relations()` 에 추가 (rest→narvaez 의 경우 기존 문서 존재 확인 후 skip).
 
 ## 이슈/블로커
 
-없음.
+### DATA-QUALITY 관찰 사항 (severity: observation — Manager 판단 요청)
+
+1. **DQ-narvaez-a** (canonical map 누락 가능성): BLK-175E-2016A-004 는 2016-A.md L38-57 영향 사상가 리스트에 `narvaez` 가 명시되어 있었으나, 과거 task-board canonical map 생성 시 누락되었을 수 있음. 향후 coverage/*.md 의 영향 사상가 자동 수집 스크립트 도입 권고.
+
+2. **DQ-narvaez-b** (birth_year 불일치): 2024-A.md L100-115 "Darcia Narvaez, 1952~" vs 2026-B.md L215-270 "Darcia Narvaez (1955-)". 실제 Darcia Narvaez 는 1952년생. TASK 지정대로 1952 채택했으나, 2026-B 원본 오기. `signal/ethics-study/data-quality-log.md` 에 append 요청.
+
+3. **DQ-narvaez-c** (영어 토큰 0-hit 다수): coverage md 원문이 해설 압축본이라 한글만 있고 영어 원어 부재한 개념어 다수 (automaticity, embodied cognition, engagement distress, inductive discipline, social intuitionism, Just Community). 제거 처리했으나, 이런 경우 "한글 뒤 영어 병기"를 Coder 산출물에서 허용할지 규약 논의 필요.
 
 ## 다음 제안
 
-- 에피쿠로스 데이터 전수 검증(Tester)을 수행하여 claim 내용의 정확성 및 관계 방향 재확인 권장
-- `democritus` thinker 문서가 ES에 없을 수 있음 — relation-democritus-epicurus의 대상 확인 필요
+1. **Manager 판단 요청 (DATA-QUALITY)**:
+   - DQ-narvaez-a/b/c 를 `signal/ethics-study/data-quality-log.md` 에 append 할지, retrospective 로 이월할지 결정 요청.
+   - 특히 DQ-narvaez-b (1952 vs 1955) 는 타 사상가에서 재발 가능성 높음 — 체크리스트화 권고.
+
+2. **Tester 호출 권고**:
+   - TASK-176-10 완료 확인용 ES 등록 검증 테스트 (`tests/test_narvaez_es_registration.py`) 작성 권고.
+   - relations 4건의 상대 thinker (rest/kohlberg/haidt/hoffman) 가 모두 `found: true` 인지 확인 필수.
+
+3. **TOP10 MISS 완료 선언**:
+   - narvaez 로 TOP10 MISS 10번째 사상가 완료 → Manager 는 TOP10 MISS 단계 종료를 task-board 에 기록하고 다음 phase 진입 여부 판단 권고.

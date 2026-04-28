@@ -156,6 +156,11 @@ projects/abc-english-app/
 - `core/`는 features 의존 금지 (반대는 허용)
 - features 간 직접 의존 금지. 필요 시 `shared/` 를 거쳐 사용.
 
+### 레이어 규칙 예외 — host feature 의 sibling domain 소비
+- **예외 승인 경로**: `player` feature 는 재생 중 단어장 추가 진입점(long-press → lookup → "단어장에 추가")을 제공하므로 `features/notebook/` 의 `notebookRepositoryProvider` + `AddNotebookEntry` usecase 를 `player_screen.dart` 에서 직접 참조할 수 있다. 이는 "host feature 가 sibling feature 의 domain 을 진입점으로 소비"하는 **유일한 승인 경로**이다.
+- 그 외 features 간 직접 import 는 여전히 금지. 공용 위젯은 `lib/shared/presentation/` 에 두고, notebook add 호출은 callback(`OnAddToNotebook`) 으로 주입한다. 예: `lib/shared/presentation/widgets/lookup_bottom_sheet.dart` 가 notebook 을 직접 참조하지 않고 `onAddToNotebook: Future<bool> Function({...})` 콜백을 받는 구조.
+- **승격 기준**: notebook add 호출자가 player 외 2곳 이상(예: settings quick-add, 플로팅 액션) 되면 `core/ports/notebook_entry_point.dart` (abstract port) 로 승격하고 DI 루트(`main.dart`)에서 구체 구현 주입으로 전환한다. 당분간 player 단일 호출자이므로 예외 유지.
+
 ### 오류 전파 정책
 - **data 계층**: 외부 원인(HTTP, DB, IO)으로 발생한 raw 예외를 잡아 `core/errors/app_exception.dart` 의 도메인 전용 예외로 변환해 throw.
   - 예: `NetworkException`, `NotFoundException`, `UnauthorizedException`, `StorageException`, `SyncConflictException`

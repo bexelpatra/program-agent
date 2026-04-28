@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ year }}-{{ slot }} 기출 — 윤리 학습 가이드{% endblock %}
+
+{% block content %}
+<div class="exam-layout">
+
+  {# ── 좌측: 연도/슬롯 nav ── #}
+  <aside class="exam-sidebar">
+    <h2 class="exam-sidebar-title">연도</h2>
+    <ul class="exam-nav">
+      {% for k in nav_keys %}
+      <li class="exam-nav-item{% if k == exam_key %} exam-nav-current{% endif %}">
+        <a href="/exam/{{ k }}" class="exam-nav-link">{{ k[:4] }}-{{ k[5:] }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+  </aside>
+
+  {# ── 본문: 탭 + 컨텐츠 ── #}
+  <section class="exam-main">
+    <header class="exam-header">
+      <a href="/exam" class="btn-back-small">← 목록</a>
+      <h1 class="exam-title">{{ year }}학년도 전공{{ slot }}</h1>
+    </header>
+
+    <nav class="exam-tab-bar" aria-label="문서 종류">
+      <button type="button" class="exam-tab-btn exam-tab-active" data-tab="study-guide">
+        study-guide
+      </button>
+      <button type="button" class="exam-tab-btn" data-tab="coverage">
+        coverage
+      </button>
+    </nav>
+
+    <article class="exam-tab-content" data-tab="study-guide" data-active="true">
+      {{ study_guide_html | safe }}
+    </article>
+
+    <article class="exam-tab-content" data-tab="coverage" hidden>
+      {{ coverage_html | safe }}
+    </article>
+  </section>
+
+  {# ── 우측: TOC (study-guide 활성 시만) ── #}
+  <aside class="exam-toc" data-tab="study-guide">
+    <h2 class="exam-toc-title">목차 ({{ toc|length }})</h2>
+    {% if toc %}
+    <ul class="exam-toc-list">
+      {% for entry in toc %}
+      <li class="exam-toc-item">
+        <a class="exam-toc-link" href="#{{ entry.id }}">{{ entry.text }}</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="exam-toc-empty">목차 없음</p>
+    {% endif %}
+  </aside>
+
+</div>
+{% endblock %}

@@ -4,8 +4,9 @@ FastAPI app for browsing thinkers indexed in Elasticsearch.
 """
 
 import logging
+import re
 
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -13,6 +14,7 @@ from elasticsearch import Elasticsearch
 import os
 
 from search import search_all
+from markdown_renderer import render as render_markdown, render_with_toc, verify_verbatim
 
 logger = logging.getLogger(__name__)
 
@@ -347,3 +349,119 @@ async def api_thinker_detail(thinker_id: str):
 async def api_search(q: str = Query(default="")):
     results = search_all(es, q.strip())
     return JSONResponse(results)
+
+
+# ─────────────────────────────────────────────
+# Phase A: Exam Document Viewer (study-guide + coverage)
+# ─────────────────────────────────────────────
+
+# 기출 산출물 루트 (web/ 의 형제 디렉토리 exam-solutions/).
+_EXAM_ROOT = os.path.normpath(
+    os.path.join(BASE_DIR, "..", "exam-solutions")
+)
+_STUDY_GUIDE_DIR = os.path.join(_EXAM_ROOT, "study-guide")
+_COVERAGE_DIR = os.path.join(_EXAM_ROOT, "coverage")
+
+# year-slot 형식 검증: YYYY-{A|B} (대문자 정확히).
+_EXAM_KEY_RE = re.compile(r"^(\d{4})-([AB])$")
+
+# study-guide 의 문항 헤더만 흡수하는 정규식 (architecture.md L411).
+# 변종: "## 문항 N" / "## 문항 서술형 N" / "## 문항 논술형 N" / "## 문항 기입형 N".
+# coverage 는 헤더 형식이 분산 (## Q1 [...] · ## N. · 표 only) 이므로 TOC 미생성.
+_TOC_PATTERN = re.compile(
+    r"^## 문항(?:\s+(?:서술형|논술형|기입형))?\s+\d+",
+    re.MULTILINE,
+)
+
+
+def _list_exam_keys() -> list[str]:
+    """Return sorted list of `{YYYY}-{A|B}` keys present in BOTH directories."""
+    if not (os.path.isdir(_STUDY_GUIDE_DIR) and os.path.isdir(_COVERAGE_DIR)):
+        return []
+    sg = {f[:-3] for f in os.listdir(_STUDY_GUIDE_DIR)
+          if f.endswith(".md") and _EXAM_KEY_RE.match(f[:-3])}
+    cv = {f[:-3] for f in os.listdir(_COVERAGE_DIR)
+          if f.endswith(".md") and _EXAM_KEY_RE.match(f[:-3])}
+    return sorted(sg & cv)
+
+
+def _read_exam_md(directory: str, key: str) -> str:
+    """Read a `{key}.md` file from `directory`. Raises FileNotFoundError if absent."""
+    path = os.path.join(directory, f"{key}.md")
+    with open(path, encoding="utf-8") as fp:
+        return fp.read()
+
+
+def _extract_toc(md_text: str) -> list[str]:
+    """Extract per-question headers from study-guide markdown.
+
+    Returns list of header strings (e.g. "## 문항 1", "## 문항 서술형 2").
+    coverage.md 는 헤더 분산으로 호출하지 않는다 (architecture.md L411).
+    """
+    return _TOC_PATTERN.findall(md_text)
+
+
+def _log_verbatim(year: str, slot: str, kind: str, md_text: str, html_body: str) -> None:
+    """Log 5-class verbatim count comparison for one exam document."""
+    counts = verify_verbatim(md_text, html_body)
+    mismatches = [k for k, (m, h) in counts.items() if m != h]
+    summary = " ".join(f"{k}={m}/{h}" for k, (m, h) in counts.items())
+    if mismatches:
+        logger.warning(
+            "VERBATIM MISMATCH %s/%s/%s: %s (mismatched=%s)",
+            year, slot, kind, summary, ",".join(mismatches),
+        )
+    else:
+        logger.info("verbatim %s/%s/%s: %s", year, slot, kind, summary)
+
+
+@app.get("/exam", response_class=HTMLResponse)
+async def list_exams(request: Request):
+    """List all exam years/slots having BOTH study-guide and coverage."""
+    keys = _list_exam_keys()
+    # 카드 그리드용 dict list (연도/슬롯 + 두 link).
+    entries = [{"key": k, "year": k[:4], "slot": k[5:]} for k in keys]
+    return templates.TemplateResponse(
+        request=request,
+        name="exam_index.html",
+        context={"entries": entries, "total": len(entries)},
+    )
+
+
+@app.get("/exam/{exam_key}", response_class=HTMLResponse)
+async def view_exam(request: Request, exam_key: str):
+    """Render study-guide + coverage tabs for one `{YYYY}-{A|B}` key."""
+    m = _EXAM_KEY_RE.match(exam_key)
+    if not m:
+        raise HTTPException(status_code=404, detail="Invalid exam key format")
+    year, slot = m.group(1), m.group(2)
+
+    try:
+        sg_md = _read_exam_md(_STUDY_GUIDE_DIR, exam_key)
+        cv_md = _read_exam_md(_COVERAGE_DIR, exam_key)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Exam document not found")
+
+    sg_html, toc = render_with_toc(sg_md)
+    cv_html = render_markdown(cv_md)
+
+    # byte-level verbatim 검증 logging (mismatch 시 warning).
+    _log_verbatim(year, slot, "study-guide", sg_md, sg_html)
+    _log_verbatim(year, slot, "coverage", cv_md, cv_html)
+
+    # 좌측 사이드바용 전체 nav list (현재 page highlight 용).
+    nav_keys = _list_exam_keys()
+
+    return templates.TemplateResponse(
+        request=request,
+        name="exam_detail.html",
+        context={
+            "exam_key": exam_key,
+            "year": year,
+            "slot": slot,
+            "study_guide_html": sg_html,
+            "coverage_html": cv_html,
+            "toc": toc,
+            "nav_keys": nav_keys,
+        },
+    )

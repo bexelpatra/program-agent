@@ -208,3 +208,38 @@
 - assignee: coder
 - summary: deploy/ 하위 Dockerfile(python:3.11-slim + gunicorn), docker-compose.yml(app expose-only 8000 + nginx 8081:80, host.docker.internal:host-gateway, data/config ro 볼륨), nginx.conf(/static alias + / proxy_pass app:8000, Range용 buffering off + HTTP/1.1, read_timeout 300s). settings.docker.yaml (ES/Ollama host.docker.internal 오버라이드). .dockerignore, README Docker 섹션 추가. compose config OK.
 - report: signal/abc-english/coder-report-TASK-037.md
+
+### TASK-100..TASK-107 (DONE) - 2026-04-22T10:50
+- title: Phase 10 — /api/v1/ 앱 지원 API (Bearer 인증 + 7개 엔드포인트)
+- assignee: coder
+- summary: web/api/v1/ 하위에 __init__.py/deps.py/episodes.py/audio.py/manifest.py/lookup.py/notebook.py 신규. Bearer 토큰은 env `ABC_API_TOKEN` 우선, settings.api_token fallback. 미설정 시 create_app() RuntimeError. audio/lookup 는 v0 핸들러 위임(중복 없음). notebook 은 전용 인덱스 `abc-notebook-v1` 에 UUID 키 + last_modified 저장. sync 는 LWW (applied/server_wins/not_found/error). TestClient 로 401/200 Bearer 동작 확인.
+- files:
+  - projects/abc-english/web/api/v1/{__init__,deps,episodes,audio,manifest,lookup,notebook}.py (신규)
+  - projects/abc-english/src/notebook_v1_store.py (신규)
+  - projects/abc-english/web/app.py (v1 router include + 시작 시 토큰 검증)
+  - projects/abc-english/config/settings.yaml (+api_token 필드)
+  - projects/abc-english/config/settings.docker.yaml (+api_token 필드)
+- manager_notes:
+  - notebook v1 는 v0(term-keyed + ollama 해설)와 스키마가 다르므로 별도 인덱스 `abc-notebook-v1` 로 분리. 의도적 도메인 모델 분리.
+  - EPISODE_MAPPING 에 `last_modified` 필드 없음 → `since_modified` 쿼리가 `published_date` 로 fallback. 정밀 동기화 품질 개선을 위해 collector + 매핑 확장 follow-up 권장.
+  - 기존 test_collector.py / test_comparator.py 실패는 pre-existing, 이번 태스크와 무관.
+
+### TASK-108 (DONE) - 2026-04-22T11:10
+- title: /api/v1/ 통합 단위테스트
+- assignee: tester
+- summary: tests/test_api_v1.py 신규. 71/71 PASS. Bearer 인증 8개 엔드포인트 × 5 시나리오 parametrize(40). episodes 리스트/상세 envelope + sort + 404, audio Range 206, manifest empty files, lookup 422, notebook CRUD + last_modified 갱신, /sync LWW(applied/server_wins/not_found). ES + notebook_v1_store 는 fixture mock. v0 엔드포인트(/api/health, /api/episodes) 무인증 regression 보존 확인.
+- files: projects/abc-english/tests/test_api_v1.py (신규)
+- findings:
+  - **bug**: `web/api/v1/episodes.py` L60-L62 — malformed `since_modified` 가 400 반환, 스펙은 422. → TASK-108-FIX 등록.
+  - **observation**: `web/api/v1/notebook.py` L96/L110 `payload.dict()` deprecated → `model_dump()`. (FIX 범위 통합)
+  - **observation**: `web/app.py` L91 `@app.on_event("startup")` deprecated → lifespan. (FIX 범위 통합)
+
+### TASK-108-FIX (DONE) - 2026-04-22T11:25
+- title: /api/v1/ 후속 수정 (422 / Pydantic v2 / FastAPI lifespan)
+- assignee: coder
+- summary: `since_modified` 를 `Query(pattern=ISO8601_REGEX)` 로 처리 → FastAPI 자동 422. `_parse_iso8601` 헬퍼 제거. `payload.dict()` → `payload.model_dump()` (notebook L96/L110 + 동일 패턴 v1 내). `@app.on_event("startup")` 는 Ollama verify 부분만 `lifespan` 로 이관. 토큰 fail-fast 는 `create_app()` 시점 그대로 유지 (TestClient 호환). 71/71 PASS, warnings 147 → 0.
+- files:
+  - projects/abc-english/web/api/v1/episodes.py (수정)
+  - projects/abc-english/web/api/v1/notebook.py (수정)
+  - projects/abc-english/web/app.py (수정)
+  - projects/abc-english/tests/test_api_v1.py (assertion 한 줄 조임 — 태스크 명시 예외)

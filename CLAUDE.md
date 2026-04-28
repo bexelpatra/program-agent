@@ -41,6 +41,11 @@ program-agent/
 │       ├── src/
 │       ├── tests/
 │       └── ...
+├── learnings/                         # 블로그 포스팅 원본 (프로젝트 archive 와 분리)
+│   └── {project-id}/
+│       └── {YYYY-MM-DD}-{slug}/
+│           ├── post.md
+│           └── imgs/                  # 선택
 └── archive/
     └── {date}-{project-id}/
 ```
@@ -377,6 +382,63 @@ Agent tool 호출:
    - `archive/{날짜}-{project-id}/projects/` → `projects/{project-id}/`
 2. `signal/registry.md`에서 해당 프로젝트의 Status를 `ACTIVE`로 변경한다.
 3. 세션 재개 프로토콜을 실행한다.
+
+---
+
+## 블로그 포스팅 규약
+
+사용자가 회고·학습 내용·사용 후기 등을 web-automation 으로 자동 업로드할 수 있는 형식으로 작성하길 요청하면 (트리거 문구 예: "블로그에 올려줘", "블로그 포스트로 작성", "포스팅 해줘", "블로그 글로 작성") 아래 규약을 따른다.
+
+### 저장 위치
+
+- **원본**: `learnings/{project-id}/{YYYY-MM-DD}-{slug}/`
+- **심링크 (자동 업로드 필요 시에만)**: `projects/web-automation/posts/{YYYY-MM-DD}-{project-id}-{slug}` → 원본
+- 심링크 파일명에 `{project-id}` 를 포함해 web-automation/posts/ 안에서도 출처를 식별할 수 있게 한다.
+
+### 파일 포맷 (web-automation `post_loader.py` 검증 규칙)
+
+`post.md` 는 YAML frontmatter + markdown 본문으로 구성한다:
+
+```markdown
+---
+title: "필수 · 비어있으면 ValueError"
+category: "선택 · 없으면 categoryId=0"
+tags: ["선택", "list"]
+---
+
+본문 markdown. 비어있으면 ValueError.
+
+이미지 참조: ${1} (1-based index) 또는 ${파일명.png} (정확 파일명 매칭).
+```
+
+규칙:
+- frontmatter 첫 줄과 닫는 줄은 정확히 `---`.
+- `title` 필수 (비어있으면 안 됨). `category` 선택. `tags` 는 list (빈 list 허용).
+- 본문이 비어있으면 ValueError.
+- 이미지: `imgs/` 서브폴더 우선 (있으면 그 안의 이미지만 수집). 없으면 폴더 평탄. 확장자: `.png .jpg .jpeg .gif .webp`.
+- `${...}` 마커는 `${1}` 형태 (1-based 양의 정수) 또는 `${파일명}` 형태. 0/음수 정수 또는 미해결 파일명은 ValueError.
+- `.published` · `.draft_id` · `.orphan.log` · `.error` 는 web-automation 러너가 자동 생성한다. Manager 가 직접 만들지 않는다.
+
+### Manager 절차
+
+1. 트리거 문구 감지 시 사용자에게 다음을 확인한다:
+   - `slug` (영문 소문자 + 하이픈, 예: `track-b-wrap`)
+   - `category` 후보 (없으면 None)
+   - `tags` 후보
+   - 이미지 포함 여부 및 파일
+2. `learnings/{project-id}/{YYYY-MM-DD}-{slug}/post.md` 작성. 이미지가 있으면 `imgs/` 에 함께 둔다.
+3. 자동 업로드를 사용자가 원하면 심링크 생성:
+   ```bash
+   ln -s ../../../learnings/{project-id}/{YYYY-MM-DD}-{slug} \
+         projects/web-automation/posts/{YYYY-MM-DD}-{project-id}-{slug}
+   ```
+4. 실제 업로드는 사용자가 web-automation 러너를 직접 실행한다. Manager 가 자동 실행하지 않는다.
+
+### 아카이브와의 관계
+
+- `learnings/` 는 **프로젝트 아카이브 대상이 아니다.** `projects/{project-id}/` 와 `signal/{project-id}/` 만 archive 로 이동하고 `learnings/{project-id}/` 는 그대로 유지된다.
+- 따라서 `projects/web-automation/posts/` 의 심링크는 archive 후에도 깨지지 않는다 (타겟이 `learnings/` 이므로).
+- 프로젝트 archive 후에도 학습 내용은 `learnings/{project-id}/` 에서 영구 조회 가능하다.
 
 ---
 

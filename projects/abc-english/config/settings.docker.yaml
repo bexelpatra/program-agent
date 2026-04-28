@@ -1,3 +1,7 @@
+# /api/v1 Bearer token. Leave empty to force override via env.
+# 환경변수 ABC_API_TOKEN 로 override.
+api_token: ""
+
 # ABC News Daily English Study - Configuration (Docker deployment override)
 #
 # Full copy of settings.yaml with only the host/port values needed to reach
@@ -38,6 +42,7 @@ elasticsearch:
     expressions: "abc-expressions"
     user_vocabulary: "abc-user-vocabulary"
     llm_cache: "abc-llm-cache"
+    notebook_v1: "abc-notebook-v1"
   bulk_size: 500
 
 llm:

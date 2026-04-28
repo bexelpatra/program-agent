@@ -7,29 +7,61 @@ site:
   base_url: "https://www.tistory.com"
   login_url: "https://www.tistory.com/auth/login"
 
-# 계정 정보
+# 카카오 계정 (티스토리 로그인용)
 account:
-  email: "YOUR_EMAIL_HERE"             # Naver 이메일 주소
-  password: "YOUR_PASSWORD_HERE"       # Naver 이메일 비밀번호
+  email: "YOUR_KAKAO_ID_HERE"
+  password: "YOUR_KAKAO_PASSWORD_HERE"
 
-# Naver IMAP 설정 (인증번호 추출용)
+# Naver IMAP 설정 (인증번호 추출용 - 실제 값은 .env 의 WA_NAVER_IMAP_EMAIL/WA_NAVER_IMAP_PASSWORD 로 주입 권장)
 naver_imap:
   server: "imap.naver.com"
   port: 993
   use_ssl: true
+  email: "YOUR_NAVER_ID@naver.com"
+  password: "YOUR_NAVER_APP_PASSWORD"
 
 # 블로그 설정
 blog:
-  blog_name: "YOUR_BLOG_NAME"         # 티스토리 블로그 이름
+  blog_name: "perlky"                  # 티스토리 블로그 이름 (실측 주입)
   default_category: ""                 # 기본 카테고리 (빈 문자열이면 미분류)
   default_visibility: "private"        # 기본 공개 설정 (public, private, protected)
 
 # 셀렉터 (사이트 UI 변경 시 여기만 수정)
 selectors:
+  # === 티스토리 자체 로그인 (현재 미사용, 예비) ===
   login_email_input: ""                # 이메일 입력 필드 셀렉터
   login_password_input: ""             # 비밀번호 입력 필드 셀렉터
   login_submit_button: ""              # 로그인 버튼 셀렉터
-  auth_code_input: ""                  # 인증번호 입력 필드 셀렉터
-  write_title_input: ""                # 글 제목 입력 필드 셀렉터
-  write_content_area: ""               # 글 본문 영역 셀렉터
-  write_publish_button: ""             # 발행 버튼 셀렉터
+
+  # === 카카오 로그인 경로 (TASK-012 구현 완료) ===
+  login_kakao_button: ""               # 티스토리 로그인 페이지의 "카카오 계정으로 로그인" 버튼
+  kakao_id_input: 'input[name="loginId"]'      # 실측: type=text, id=loginId--1
+  kakao_pw_input: 'input[name="password"]'     # 실측: type=password, id=password--2
+  email_2fa_button: ""                 # 2차 인증 화면 "이메일로 인증하기" 버튼 (DOM 텍스트 fallback 있음)
+
+  # === 인증번호 (TASK-012 공용) ===
+  auth_code_input: ""                  # 인증번호 입력 필드 (TASK-012-A poll_verification_code 흐름에서 사용)
+
+  # === 글 작성 (TASK-013 구현 대상) ===
+  write_title_input: 'textarea#post-title-inp'       # 제목 입력 (textarea)
+  write_body_iframe: 'iframe[name="editor-tistory_ifr"]'  # 본문 iframe (fallback 용)
+  tag_input: 'input#tagText'                         # 태그 입력 (Enter 확정)
+  category_btn: 'button#category-btn'                # 카테고리 드롭다운 열기
+  category_list: '#category-list'                    # 카테고리 옵션 컨테이너 (클릭 후 동적 생성)
+  attach_btn: 'div[role="button"][aria-label="첨부"]'  # 첨부 드롭다운 (실측: aria-label 사용, title 은 빈값)
+  attach_option_prefix: '.mce-tistory-attach-item'   # 첨부 메뉴 옵션 (사진/파일/슬라이드쇼)
+  save_draft_btn: 'a.action'                         # 임시저장 (text="임시저장" 필터는 코드측)
+  publish_btn: 'button#publish-layer-btn'            # 완료 (발행)
+
+# === 이메일 2차 인증 설정 (카카오가 Naver 메일로 발송하는 인증번호 처리용) ===
+# - sender_patterns: FROM 필터로 사용할 발신자 이메일/도메인 목록. 첫 매치 시 해당 sender 로 fetch.
+#                    스모크 테스트에서 실측 후 최종 확정.
+# - code_length:     인증번호 자릿수 (카카오 실측 8자리, 과거 6자리 공급자도 지원).
+# - within_minutes:  최근 N분 이내 수신 메일만 대상 (기본 5분 — 카카오 인증번호 유효 시간 감안).
+email_2fa:
+  sender_patterns:
+    - "noreply@kakaocorp.com"
+    - "accounts.kakao.com"
+    - "kakao.com"
+  code_length: 8
+  within_minutes: 5
