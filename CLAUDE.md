@@ -213,7 +213,11 @@ Agent tool 호출:
 
 3. **Tester 발견 이슈 자동 태스크화**: Tester report frontmatter의 `severity` 필드를 기준으로 판단한다.
    - `severity: blocker` 또는 `severity: bug` → Manager는 **반드시** 수정 태스크를 `task-board.md`에 등록하고 Coder에게 할당한다. Tester 본문 어투("관찰/참고용" 등)와 무관하게 강제. **단 `environment` 인 경우는 코드 수정 태스크를 만들지 않는다 (아래 참조).**
-   - `severity: observation` → Manager 판단. 즉시 태스크화하거나 retrospective로 이월한다.
+   - `severity: observation` → Manager 판단. 즉시 태스크화하거나 retrospective로 이월한다. **단 아래 카테고리에 해당하면 자동으로 `bug` 로 승격해 후속 태스크 강제**:
+     - **UI/UX 원칙 위반** (project CLAUDE.md 또는 architecture.md V3 § "UI/UX 원칙" 명시 항목): JSON/raw 코드 노출, 비개발자 사용자 직접 raw 입력 (ticker symbol 임의 입력, JSON-string textarea fallback 등), 한국어 미준수, 화면 한도 초과 등
+     - **실거래/계산 정합성 원칙 위반** (architecture.md "실거래 70% 원칙" 등): look-ahead bias 의심, 정수 주 위반, 음수 잔고, FX 정밀도, 비거래일 silent 0
+     - **보안 원칙 위반**: 인증 우회, secret 노출, 입력 sanitize 누락, CORS 과도 허용
+     - 위 3 카테고리는 "기능은 동작하지만 원칙에 어긋남" 형태로 observation 으로 보고되기 쉬운데, 사용자 첫 사용 시 사고로 이어지므로 자동 승격.
    - `severity: environment` → 코드 결함이 아닌 환경/인프라 미적용 (DB 마이그레이션 미실행, 환경 변수 미설정, 외부 서비스 미가동 등). Manager 가 후속 코드 수정 태스크를 생성하지 **않는다**. `signal/{project-id}/blockers.md` 에만 사용자 액션 가이드 형태로 기록하고, retrospective 진입 전에 사용자에게 일괄 보고.
    - severity가 생략되었는데 `## 이슈/블로커`에 구체적 코드 문제가 있으면, Manager가 severity를 추정해 동일 규칙을 적용한다.
    - **원본 데이터 품질 이슈 분리** (DATA-QUALITY): 코드 결함이 아니라 입력 원본 파일(외부 소스·사용자 제공 md 등)의 포맷·escaping·누락으로 발생한 issue는 일반 FIX 태스크 대신 `TASK-DQ-*` prefix 태스크로 분리하고, `signal/{project-id}/data-quality-log.md` (append-only)에 적재한다. 원본 수정 금지 규정이 있는 프로젝트에서도 로그는 남아 배치 정정 시점에 일괄 처리한다. severity=observation으로 묻혀 사라지는 것을 방지한다.
@@ -225,7 +229,19 @@ Agent tool 호출:
 
 ### Step 5: 반복 또는 완료
 - `task-board.md`에 `TODO` 또는 `IN_PROGRESS` 태스크가 남아있으면 Step 3으로 돌아간다.
-- 모든 태스크가 `DONE`이면 Step 6으로 진행한다.
+- 모든 태스크가 `DONE`이면 Step 5.5 (e2e 페르소나 검증) → Step 6으로 진행한다.
+
+### Step 5.5: e2e 페르소나 click-through (의무)
+
+모든 코드 태스크가 DONE 이고 회고 진입 전에, Manager 가 직접 **비개발자 사용자 첫 사용 시나리오**를 click-through 검증한다. 이 단계는 사용자가 보고하기 전에 사고를 발견하기 위한 마지막 안전망 (Harness Engineering).
+
+1. 시나리오 정의: 프로젝트 미션 (architecture.md "목적") 의 첫 사용자 흐름을 1개 선택. 예 (stock-backtest): 자산 카탈로그 → universe 구성 → 전략 선택 + 비중 입력 → 실행 → 결과 확인.
+2. 자동화 가능하면 `backend/tests/e2e/test_persona_first_use.py` 같은 회귀 테스트로 박제. 단순 HTTP + HTML grep 으로도 충분 (헤드리스 브라우저 필수 X).
+3. 발견된 사고는 즉시 후속 태스크 (TASK-2xx 등) 등록 + 수정 후 다시 시나리오 통과 확인.
+4. 통과한 시나리오는 **Failure replay** 카테고리로 회귀 테스트화 — 같은 사고 재발 시 즉시 자동 검출.
+5. Step 5.5 가 통과해야 Step 6 (회고) 진입.
+
+이 단계가 빠지면, 사용자가 첫 사용에서 사고를 발견하고 신뢰가 깨진다.
 
 ### Step 6: 회고 및 개선 제안
 
