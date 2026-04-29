@@ -1012,3 +1012,241 @@ echo "done-log appended."`
 
 ```
 
+## 2026-04-28T23:43:04
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && python -c "
+from unittest.mock import Mock
+from datetime import date
+from app.domain.asset.registration import (
+    register_asset, RegistrationRequest, ValidationOutcome,
+    TickerValidationFailed, AlreadyRegistered,
+)
+from app.domain.asset.entity import Asset
+
+# Mock validator + repo + enqueuer
+validator = Mock()
+validator.validate_ticker.return_value = ValidationOutcome('VTI', True, True, date(2001,5,1), None)
+repo = Mock()
+repo.find_by_symbol_market.return_value = None
+repo.upsert.side_effect = lambda a: Asset(
+    asset_id=99, symbol=a.symbol, market=a.market, asset_type=a.asset_type,
+    currency=a.currency, name=a.name, meta=a.meta, active=True,
+    start_date=a.start_date, last_ingested_at=None,
+)
+enqueuer = Mock()
+
+req = RegistrationRequest('VTI', 'US', 'ETF', 'USD', 'Vanguard Total Stock Market ETF', {})
+result = register_asset(req, repo, validator, enqueuer)
+assert result.asset.asset_id == 99
+assert result.backfill_enqueued is True
+assert enqueuer.enqueue.call_count == 1
+assert result.note is None
+print('case 1 pass: 정상 등록 + 큐잉')
+
+# 검증 실패 케이스
+validator.validate_ticker.return_value = ValidationOutcome('XYZ', False, False, None, '데이터 없음')
+try:
+    register_asset(RegistrationRequest('XYZ', 'US', 'ETF', 'USD', '?', {}), repo, validator, enqueuer)
+    assert False, 'should raise'
+except TickerValidationFailed as e:
+    assert '찾을 수 없' in str(e) or '데이터 없음' in str(e)
+print('case 2 pass: 검증 실패 → TickerValidationFailed')
+
+# 중복 등록 케이스 (active=True 기존)
+repo2 = Mock()
+repo2.find_by_symbol_market.return_value = Asset(
+    asset_id=5, symbol='VTI', market='US', asset_type='ETF',
+    currency='USD', name='기존', meta={}, active=True,
+    start_date=date(2001,5,1), last_ingested_at=None,
+)
+try:
+    register_asset(RegistrationRequest('VTI', 'US', 'ETF', 'USD', '?', {}), repo2, validator, enqueuer)
+    assert False, 'should raise AlreadyRegistered'
+except AlreadyRegistered as e:
+    assert 'VTI' in str(e) and 'US' in str(e)
+print('case 3 pass: 중복 등록 → AlreadyRegistered')
+
+# inactive 기존 자산 → 재등록 허용
+repo3 = Mock()
+repo3.find_by_symbol_market.return_value = Asset(
+    asset_id=7, symbol='VTI', market='US', asset_type='ETF',
+    currency='USD', name='이전', meta={}, active=False,
+    start_date=date(2001,5,1), last_ingested_at=None,
+)
+captured = {}
+def upsert3(a):
+    captured['arg'] = a
+    return Asset(asset_id=7, symbol=a.symbol, market=a.market, asset_type=a.asset_type,
+                 currency=a.currency, name=a.name, meta=a.meta, active=True,
+                 start_date=a.start_date, last_ingested_at=None)
+repo3.upsert.side_effect = upsert3
+validator.validate_ticker.return_value = ValidationOutcome('VTI', True, True, date(2001,5,1), None)
+result3 = register_asset(RegistrationRequest('VTI', 'US', 'ETF', 'USD', '신규', {}), repo3, validator, enqueuer)
+assert captured['arg'].asset_id == 7  # inactive 기존 PK 재사용
+assert result3.asset.asset_id == 7
+print('case 4 pass: inactive 자산 재등록 (PK 재사용)')
+
+# has_min_history=False → note 안내
+repo4 = Mock()
+repo4.find_by_symbol_market.return_value = None
+repo4.upsert.side_effect = lambda a: Asset(asset_id=42, symbol=a.symbol, market=a.market, asset_type=a.asset_type,
+                                            currency=a.currency, name=a.name, meta=a.meta, active=True,
+                                            start_date=a.start_date, last_ingested_at=None)
+validator.validate_ticker.return_value = ValidationOutcome('NEW', True, False, date(2025,1,1), None)
+result4 = register_asset(RegistrationRequest('NEW', 'US', 'ETF', 'USD', '?', {}), repo4, validator, enqueuer)
+assert result4.note is not None and '1년' in result4.note
+print('case 5 pass: has_min_history=False → note 안내')
+
+# 큐잉 실패 → 등록은 OK, note 안내
+enqueuer_fail = Mock()
+enqueuer_fail.enqueue.side_effect = RuntimeError('queue down')
+repo5 = Mock()
+repo5.find_by_symbol_market.return_value = None
+repo5.upsert.side_effect = lambda a: Asset(asset_id=11, symbol=a.symbol, market=a.market, asset_type=a.asset_type,
+                                            currency=a.currency, name=a.name, meta=a.meta, active=True,
+                                            start_date=a.start_date, last_ingested_at=None)
+validator.validate_ticker.return_value = ValidationOutcome('SPY', True, True, date(1993,1,1), None)
+result5 = register_asset(RegistrationRequest('SPY', 'US', 'ETF', 'USD', '?', {}), repo5, validator, enqueuer_fail)
+assert result5.backfill_enqueued is False
+assert result5.note is not None and '큐잉 실패' in result5.note
+print('case 6 pass: 큐잉 실패 → 등록 유지 + note')
+
+print('ALL registration unit tests pass')
+"`
+- output:
+```
+
+```
+
+## 2026-04-29T00:19:12
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest && .venv/bin/python -c "import pytest, httpx, pytest_asyncio, fastapi; print('pytest', pytest.__version__); print('httpx', httpx.__version__); print('fastapi', fastapi.__version__)" 2>&1 | tail -10`
+- output:
+```
+
+```
+
+## 2026-04-29T00:19:34
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest && .venv/bin/pip install 'schemathesis>=3.30,<4' 'pytest>=8,<9' 2>&1 | tail -10`
+- output:
+```
+
+```
+
+## 2026-04-29T00:21:59
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/golden/ -v --tb=short 2>&1 | tail -80`
+- output:
+```
+
+```
+
+## 2026-04-29T00:22:14
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/golden/ -v --tb=short 2>&1 | tail -30`
+- output:
+```
+
+```
+
+## 2026-04-29T00:23:45
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/api/ -v --tb=short 2>&1 | tail -100`
+- output:
+```
+
+```
+
+## 2026-04-29T00:24:14
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/api/ -v --tb=short -x 2>&1 | tail -120`
+- output:
+```
+
+```
+
+## 2026-04-29T00:24:47
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/api/ -v --tb=short 2>&1 | tail -100`
+- output:
+```
+
+```
+
+## 2026-04-29T00:25:14
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/api/ -v --tb=short 2>&1 | tail -50`
+- output:
+```
+
+```
+
+## 2026-04-29T00:25:25
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/ -v --tb=short 2>&1 | tail -50`
+- output:
+```
+
+```
+
+## 2026-04-29T00:27:34
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/pytest tests/ --tb=line -q 2>&1 | tail -20`
+- output:
+```
+
+```
+
+## 2026-04-29T00:35:36
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && python -m pytest tests/regression/test_lookahead.py -v 2>&1 | tail -50`
+- output:
+```
+
+```
+
+## 2026-04-29T00:35:50
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && python -m pytest tests/regression/test_lookahead.py -v -p no:dash 2>&1 | tail -30`
+- output:
+```
+
+```
+
+## 2026-04-29T00:36:46
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && python -m pytest tests/regression/test_calendar_defense.py -v -p no:dash 2>&1 | tail -50`
+- output:
+```
+
+```
+
+## 2026-04-29T00:37:02
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && python -m pytest tests/golden/ -v -p no:dash 2>&1 | tail -20`
+- output:
+```
+
+```
+
+## 2026-04-29T00:38:14
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && /home/jai/pa/stock-backtest/projects/stock-backtest/.venv/bin/python -m pytest tests/regression/ -v 2>&1 | tail -40`
+- output:
+```
+
+```
+
+## 2026-04-29T00:39:47
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && /home/jai/pa/stock-backtest/projects/stock-backtest/.venv/bin/python -m pytest tests/regression/test_cash_by_ccy.py -v 2>&1 | tail -50`
+- output:
+```
+
+```
+
+## 2026-04-29T00:39:56
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && /home/jai/pa/stock-backtest/projects/stock-backtest/.venv/bin/python -m pytest tests/regression/ -v 2>&1 | tail -10`
+- output:
+```
+
+```
+
+## 2026-04-29T00:40:00
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && /home/jai/pa/stock-backtest/projects/stock-backtest/.venv/bin/python -m pytest tests/ 2>&1 | tail -15`
+- output:
+```
+
+```
+
+## 2026-04-29T00:57:13
+- command: `cd /home/jai/pa/stock-backtest/projects/stock-backtest/backend && ../.venv/bin/python -m pytest tests/regression/ tests/golden/ -v 2>&1 | tail -80`
+- output:
+```
+
+```
+

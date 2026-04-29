@@ -36,20 +36,22 @@ program-agent/
 │       ├── tester-report.md
 │       ├── reviewer-report.md
 │       └── retrospective.md
-├── projects/
-│   └── {project-id}/                  # 프로젝트별 코드
-│       ├── src/
-│       ├── tests/
-│       └── ...
-└── archive/
+└── projects/
+    └── {project-id}/                  # 프로젝트별 코드 (현 worktree 의 한 프로젝트만 보임)
+        ├── src/
+        ├── tests/
+        └── ...
 
 # 별도 위치 (repo 외부)
-/home/jai/learnings/program-agent/    # 블로그 포스팅 원본 (repo 외부, project archive 와 분리)
+/home/jai/learnings/program-agent/    # 블로그 포스팅 원본 (repo 외부)
 └── {project-id}/
     └── {YYYY-MM-DD}-{slug}/
         ├── post.md
         └── imgs/                     # 선택
-    └── {date}-{project-id}/
+
+# Worktree 레이아웃 (실제 디스크)
+/home/jai/program-agent/              # main 브랜치 (framework 전용)
+/home/jai/pa/{project-id}/            # 각 project/{id} 브랜치 worktree
 ```
 
 ### 경로 변수
@@ -61,27 +63,34 @@ program-agent/
 
 ---
 
-## 멀티 세션 운영 규칙
+## 멀티 세션 운영 규칙 (worktree 기반)
 
-완전히 독립적인 프로젝트는 **별도의 Claude Code 세션(SSH 터미널)**에서 병렬로 운영할 수 있다.
+각 프로젝트는 자기 worktree 디렉토리에서 독립된 Claude Code 세션으로 운영된다. 같은 저장소 내 worktree 끼리는 서로의 작업 트리에 영향을 주지 않는다.
+
+### Worktree → 브랜치 매핑
+
+| Worktree 경로 | 브랜치 | 역할 |
+|----------------|--------|------|
+| `/home/jai/program-agent` | `main` | framework 전용 (CLAUDE.md, agents/, hooks/, signal/{schema,registry,execution-log}) |
+| `/home/jai/pa/{project-id}` | `project/{project-id}` | 단일 프로젝트의 코드 + signal |
+
+세션 시작은 항상 해당 worktree 디렉토리에서: `cd ~/pa/stock-backtest && claude` 식으로.
 
 ### 공유 자원 규칙
 
-| 파일/디렉토리 | 접근 | 규칙 |
+| 파일/디렉토리 | 위치 | 규칙 |
 |---------------|------|------|
-| `signal/registry.md` | 읽기: 모든 세션 / 쓰기: **자기 프로젝트 행만** | 동시에 새 프로젝트를 등록하지 않는다 |
-| `signal/schema.md` | 읽기 전용 | 수정은 단독 세션에서만 |
-| `CLAUDE.md` | 읽기 전용 | 수정은 단독 세션에서만 |
-| `agents/*.md` | 읽기 전용 | 수정은 단독 세션에서만 |
-| `signal/{project-id}/` | 해당 프로젝트 세션 전용 | 다른 프로젝트의 signal에 접근 금지 |
-| `projects/{project-id}/` | 해당 프로젝트 세션 전용 | 다른 프로젝트의 코드에 접근 금지 |
+| `CLAUDE.md`, `agents/*.md`, `hooks/`, `signal/schema.md` | main 브랜치 | 수정은 main worktree(`/home/jai/program-agent`)에서만. 변경 후 각 project/* 브랜치에 `git merge main` 으로 전파 |
+| `signal/registry.md` | main 브랜치 | "어떤 project/* 브랜치가 존재하는가" 인덱스. 새 프로젝트 등록은 main worktree에서 수행 |
+| `signal/{project-id}/` | 해당 project/* 브랜치 | 그 프로젝트 worktree 에서만 보임. 다른 프로젝트의 signal 에 접근 불가 (브랜치 격리로 자동 강제) |
+| `projects/{project-id}/` | 해당 project/* 브랜치 | 그 프로젝트 worktree 에서만 보임 |
 
 ### 프레임워크 파일 수정 시
 
 `CLAUDE.md`, `agents/*.md`, `signal/schema.md` 수정이 필요할 때:
-1. 다른 세션에서 프로젝트가 실행 중이 아닌지 사용자에게 확인한다.
-2. 확인 후 단독으로 수정한다.
-3. 수정 완료를 사용자에게 알려 다른 세션 재시작을 유도한다.
+1. main worktree(`/home/jai/program-agent`)에서 수정 → commit → push.
+2. 각 project/* 브랜치에서 `git merge main` 으로 framework 갱신분 받기.
+3. 다른 worktree 의 Claude 세션이 진행 중이면 합류 시점은 사용자 판단.
 
 ---
 
@@ -135,6 +144,7 @@ program-agent/
 - 태스크 간 의존성이 있으면 `Depends On`에 명시한다.
 - 태스크는 하나의 에이전트가 한 번에 처리할 수 있는 크기로 분해한다.
 - **의존성 검증**: 프로젝트 초기화 태스크 완료 직후, 의존성 설치 및 import 검증을 수행한다.
+- **데이터 공급/소비 경계 명시**: API/UI/엔진 태스크가 도메인 함수를 호출하기 전, **데이터 공급 (ETL/어댑터/로더)** 태스크를 의존성에 명시한다. 임시 placeholder 우회 (예: 빈 DataFrame 으로 함수 시그니처만 채움) 는 별도 후속 태스크로 분리하지 말고, 공급 태스크의 일부로 통합한다. 이를 무시하면 placeholder 가 통합 단계까지 미뤄지면서 e2e 검증이 NotImplemented 로 실패한다.
 - **실측 인용 의무**: 태스크 description에 **구체 수치·파일 경로·라인 번호·심볼·개수·임계값**을 기재할 때는 기억/추정이 아니라 반드시 `Read`·`Grep`·`ls`·`Bash`로 **직전에 실측한 결과**를 인용한다. 실측 없이 적은 숫자는 Reviewer가 NEEDS_REVISION으로 돌려보내므로 Coder/Tester 호출이 지연된다. 예: "Section C 행 수 == 61 (map L139 실측)", "L337-L342 bare-id 경로". 모호한 표현("대략 50여 건", "L300 부근")은 금지.
 
 ### Step 3: 태스크 실행
@@ -145,6 +155,7 @@ program-agent/
    - Reviewer 판정이 **PASS**일 때에만 다음 단계로 진행.
    - **NEEDS_REVISION**이면 Manager가 지적 사항을 반영해 산출물을 수정하고 Reviewer를 재호출한다. PASS 이전에는 Coder/Tester를 절대 호출하지 않는다.
    - **ESCALATE**이면 사용자에게 판단을 요청한다.
+   - **마일스톤 재검증 권장**: 사전 검증 (task-board 분해 후) 1회 외에도 다음 시점에는 Reviewer 재호출을 권장한다 — (1) **도메인 코어 완료** 직후 (예: engine.py 와 모든 의존 모듈 DONE), (2) **통합 직전** (마지막 e2e 통합 태스크 시작 전). 자율 진행 모드에서 Coder report 의 "DONE" 주장만 신뢰하지 않고, Reviewer 가 코드/테스트 결과의 일관성을 독립 검증하도록 한다.
 3. 대상 에이전트의 프롬프트 템플릿(`agents/*.md`)을 읽는다.
 4. Agent tool로 서브에이전트를 호출한다.
 
@@ -201,8 +212,9 @@ Agent tool 호출:
    - **BLOCKED**: 블로커를 해결할 태스크를 새로 생성한다.
 
 3. **Tester 발견 이슈 자동 태스크화**: Tester report frontmatter의 `severity` 필드를 기준으로 판단한다.
-   - `severity: blocker` 또는 `severity: bug` → Manager는 **반드시** 수정 태스크를 `task-board.md`에 등록하고 Coder에게 할당한다. Tester 본문 어투("관찰/참고용" 등)와 무관하게 강제.
+   - `severity: blocker` 또는 `severity: bug` → Manager는 **반드시** 수정 태스크를 `task-board.md`에 등록하고 Coder에게 할당한다. Tester 본문 어투("관찰/참고용" 등)와 무관하게 강제. **단 `environment` 인 경우는 코드 수정 태스크를 만들지 않는다 (아래 참조).**
    - `severity: observation` → Manager 판단. 즉시 태스크화하거나 retrospective로 이월한다.
+   - `severity: environment` → 코드 결함이 아닌 환경/인프라 미적용 (DB 마이그레이션 미실행, 환경 변수 미설정, 외부 서비스 미가동 등). Manager 가 후속 코드 수정 태스크를 생성하지 **않는다**. `signal/{project-id}/blockers.md` 에만 사용자 액션 가이드 형태로 기록하고, retrospective 진입 전에 사용자에게 일괄 보고.
    - severity가 생략되었는데 `## 이슈/블로커`에 구체적 코드 문제가 있으면, Manager가 severity를 추정해 동일 규칙을 적용한다.
    - **원본 데이터 품질 이슈 분리** (DATA-QUALITY): 코드 결함이 아니라 입력 원본 파일(외부 소스·사용자 제공 md 등)의 포맷·escaping·누락으로 발생한 issue는 일반 FIX 태스크 대신 `TASK-DQ-*` prefix 태스크로 분리하고, `signal/{project-id}/data-quality-log.md` (append-only)에 적재한다. 원본 수정 금지 규정이 있는 프로젝트에서도 로그는 남아 배치 정정 시점에 일괄 처리한다. severity=observation으로 묻혀 사라지는 것을 방지한다.
 
@@ -334,13 +346,21 @@ Agent tool 호출:
 
 ## 새 프로젝트 생성
 
-사용자가 새 프로젝트를 요청하면:
+사용자가 새 프로젝트를 요청하면 main worktree(`/home/jai/program-agent`)에서:
 
 1. `project-id`를 결정한다 (영문 소문자, 하이픈 구분, 사용자 확인).
-2. 디렉토리를 생성한다:
-   ```
-   signal/{project-id}/
-   projects/{project-id}/
+2. main 에서 분기한 새 브랜치 + worktree 를 생성한다:
+   ```bash
+   git checkout main
+   git checkout -b project/{project-id}
+   mkdir -p projects/{project-id} signal/{project-id}
+   # 초기 signal 파일 생성 (아래 3 항목)
+   git add . && git commit -m "project/{project-id}: initial scaffold"
+   git push -u origin project/{project-id}
+   git checkout main   # main worktree 자체는 main 으로 복귀
+   git worktree add /home/jai/pa/{project-id} project/{project-id}
+   ln -s /home/jai/.claude/projects/-home-jai-program-agent \
+         /home/jai/.claude/projects/-home-jai-pa-{project-id}
    ```
 3. 초기 signal 파일을 생성한다:
    - `signal/{project-id}/task-board.md` → 빈 테이블
@@ -350,40 +370,42 @@ Agent tool 호출:
    - `signal/{project-id}/tester-report.md` → 초기 상태
    - `signal/{project-id}/reviewer-report.md` → 초기 상태
    - `signal/{project-id}/app-porter-report.md` → 초기 상태 (모바일 앱 프로젝트인 경우)
-4. `signal/registry.md`에 프로젝트를 등록한다.
-5. 오케스트레이션 루프 Step 1부터 진행한다.
+4. main 의 `signal/registry.md`에 새 브랜치 행을 추가한다.
+5. 사용자에게 `cd /home/jai/pa/{project-id} && claude` 로 새 세션을 시작하라고 안내한다.
+6. 새 세션에서 오케스트레이션 루프 Step 1부터 진행한다.
 
 ---
 
-## 프로젝트 아카이브 및 리셋
+## 프로젝트 lifecycle (worktree 기반)
 
-프로젝트의 모든 태스크가 DONE이거나, 사용자가 아카이브를 요청하면 아래 절차를 실행한다.
+프로젝트의 lifecycle 은 git 브랜치 + worktree 의 존재 여부로 표현된다. 별도의 archive 디렉토리·상태 컬럼은 사용하지 않는다.
 
-### 아카이브 절차
+| 상태 | 표현 |
+|------|------|
+| 작업 중 | `project/{id}` 브랜치 + `/home/jai/pa/{id}` worktree 둘 다 존재 |
+| 잠시 비활성 | 브랜치는 있고 worktree 없음. 재개 시 `git worktree add` |
+| 더 이상 작업 안함 | 브랜치만 origin 에 보존, worktree 만들지 않음 |
 
-사용자에게 아카이브 여부를 확인한 뒤 진행한다:
+### 작업 일시 중단 / 재개
 
-1. `archive/{날짜}-{project-id}/` 디렉토리를 생성한다.
-2. 다음을 아카이브 디렉토리로 **이동**한다:
-   - `signal/{project-id}/` 전체 → `archive/{날짜}-{project-id}/signal/`
-   - `projects/{project-id}/` 전체 → `archive/{날짜}-{project-id}/projects/`
-3. `signal/registry.md`에서 해당 프로젝트의 Status를 `ARCHIVED`로 변경한다.
-4. 사용자에게 아카이브 완료를 보고한다.
+```bash
+# 일시 중단: worktree 만 제거 (브랜치는 origin 에 그대로)
+git worktree remove /home/jai/pa/{id}
 
-### 아카이브 확인 명령
+# 재개
+git worktree add /home/jai/pa/{id} project/{id}
+ln -sfn /home/jai/.claude/projects/-home-jai-program-agent \
+        /home/jai/.claude/projects/-home-jai-pa-{id}
+cd /home/jai/pa/{id} && claude
+```
 
-사용자가 아카이브 목록을 보고 싶을 때:
-- `archive/` 디렉토리의 하위 폴더를 나열한다.
-- 특정 아카이브의 상세를 보려면 해당 폴더의 `signal/architecture.md`와 `signal/done-log.md`를 읽는다.
+### 종료 (선언만, 데이터 보존)
 
-### 아카이브 복원
+별도 절차 없음. worktree 만 제거하고 브랜치는 origin 에 두면 된다. `signal/registry.md` 에서 행을 삭제하거나 메모로 남기는 것은 사용자 선택.
 
-이전 프로젝트를 이어서 작업하고 싶을 때:
-1. 대상 아카이브의 파일들을 원래 위치로 복원한다:
-   - `archive/{날짜}-{project-id}/signal/` → `signal/{project-id}/`
-   - `archive/{날짜}-{project-id}/projects/` → `projects/{project-id}/`
-2. `signal/registry.md`에서 해당 프로젝트의 Status를 `ACTIVE`로 변경한다.
-3. 세션 재개 프로토콜을 실행한다.
+### 안전망 스냅샷
+
+대규모 마이그레이션처럼 되돌릴 위험이 있는 작업은 **태그**로 시점을 못 박는다 (브랜치가 아니라). 예: `pre-split-snapshot-2026-04-28`, `legacy-multi-project-2026-04-28`. `git checkout <tag>` 로 그 시점 복구 가능.
 
 ---
 
