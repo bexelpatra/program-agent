@@ -1,0 +1,255 @@
+# Done Log
+
+V3 Phase 1 MVP 완료 태스크 append-only 로그.
+
+### TASK-001 (DONE) - 2026-04-29T07:55
+- title: 프로젝트 스캐폴드 (backend/frontend, requirements/package.json, .env.example, README, Docker Compose Postgres+TimescaleDB)
+- assignee: coder
+- summary: backend (FastAPI/SQLAlchemy 2.0/Alembic/pandas 2.2/numpy 2.0/yfinance/pykrx/exchange_calendars/APScheduler 17개) + frontend (Next 14.2/React 18/TS strict/Zod/tailwind 3.4/recharts/next-intl/vitest) 스캐폴드. PostgreSQL+TimescaleDB Docker Compose, .env.example (TZ=Asia/Seoul, DEFAULT_BASE_CURRENCY=KRW), 한국어 README. DoD 4개 (`pip install`, `python -c 'import app'`, `npm install`, `npm run build`) 모두 PASS.
+- files: projects/stock-backtest/backend/{requirements.txt, app/__init__.py + 9개 서브패키지 __init__, scripts/smoke_imports.py, alembic/.gitkeep, tests/__init__.py}, projects/stock-backtest/frontend/{package.json, tsconfig.json, next.config.mjs, postcss.config.mjs, tailwind.config.ts, .eslintrc.json, .gitignore, app/{layout.tsx, page.tsx, globals.css}, components/{ui,strategy,backtest,asset}/.gitkeep, lib/.gitkeep, hooks/.gitkeep}, projects/stock-backtest/{docker-compose.yml, .env.example, .gitignore, README.md}
+- 의존성 충돌: 없음 (numpy 2.0.2 + pandas 2.2.3 + yfinance 0.2.66 + pykrx 1.2.7 ABI 정상)
+
+### TASK-002 (DONE) - 2026-04-29T08:05
+- title: SQLAlchemy + Alembic 초기 설정
+- assignee: coder
+- summary: pydantic-settings 기반 Settings (database_url/default_base_currency=KRW/tz) + SQLAlchemy 2.0 engine/SessionLocal/Base/get_db() + alembic init + alembic/env.py 가 Settings 의 database_url 동적 주입. config.py 환경변수만, db.py SQLAlchemy 객체만 단방향 의존.
+- files: projects/stock-backtest/backend/{alembic/{env.py, script.py.mako, versions/}, alembic.ini, app/core/config.py, app/core/db.py}
+- DoD: import 검증 1·2 PASS. `alembic current` 는 SOFT BLOCKER-001 (DB 잔재 alembic_version='0003') — TASK-010 baseline 작성 시 처리.
+
+### TASK-060 (DONE) - 2026-04-29T08:05
+- title: docs/openapi.yaml 초안 + FastAPI 스캐폴드 + 전역 예외 핸들러 + 공통 base 스키마
+- assignee: coder
+- summary: FastAPI app (Quant Lab API 0.1.0, /api prefix, CORS for localhost:3000) + 전역 예외 핸들러 (HTTPException/RequestValidationError/Exception → ErrorResponse with stage/type/message/request_ctx/trace_id, 서버 로그 접두사 동일) + GET /api/health + 공통 schemas (ErrorDetail/ErrorResponse frozen, PaginatedResponse[T] Generic, TimestampedModel, HealthResponse) + docs/openapi.yaml (OpenAPI 3.1.0). DoD 5/5 통과 (라우트 등록, /api/health 200, /api/nonexistent ErrorResponse+trace_id, openapi.json 4종 schema, openapi.yaml safe_load).
+- files: projects/stock-backtest/backend/app/{main.py, api/__init__.py, api/_error.py, api/health.py, schemas/common.py}, projects/stock-backtest/docs/openapi.yaml
+- TASK-002 충돌: 0건 (core/ 미터치, alembic/ 미터치, app/__init__.py 미수정)
+
+### TASK-010 (DONE) - 2026-04-29T08:25
+- title: 마스터 테이블 alembic 마이그레이션 (assets, ingestion_log)
+- assignee: coder
+- summary: SQLAlchemy 2.0 typed Mapped 스타일 ORM 2종 (Asset 12 컬럼 - JSONB meta, UNIQUE(symbol,market), TimestampedModel mixin / IngestionLog 8 컬럼 - FK CASCADE, immutable 이벤트라 mixin 미적용) + alembic baseline migration `0001_v3_baseline` (down_revision=None, indexes 4개 ix_assets_market/symbol/active + ix_ingestion_log_asset_id) + DB 초기화 가이드 README. status 는 String(16) + Pydantic Literal 권장 (Postgres ENUM 미사용). market_events 미생성 (Phase 2 이월). DoD 1·2·5 PASS, 3 OK (heads=0001_v3_baseline), 4 SOFT (BLOCKER-001 잔재로 사용자 DB 초기화 후 적용).
+- files: projects/stock-backtest/backend/{app/models/{_base.py, asset.py, ingestion_log.py, __init__.py}, alembic/{versions/0001_v3_baseline.py, README.md}}
+- BLOCKER-001 갱신: PARTIAL (사용자가 docker volume drop 또는 schema drop 후 alembic upgrade head 실행 필요)
+
+### TASK-003 (DONE) - 2026-04-29T08:50
+- title: 자산 카탈로그 시드 데이터 (KR/US/CRYPTO 67개)
+- assignee: coder
+- summary: TypedDict 기반 SeedAsset 67개 - KR 20 (domestic 8/overseas 5/bond 5/commodity 2), US 35 (광역7/섹터5/채권8/원자재6/부동산2/해외7), CRYPTO 12. asset_type: ETF 34/BOND 12/CRYPTO 12/COMMODITY 9. 한국 ETF 는 거래소 공식 한글명. seed_catalog.py CLI 가 ON CONFLICT DO UPDATE 멱등 UPSERT.
+- files: projects/stock-backtest/backend/app/data/seed/{__init__.py, assets_catalog.py}, projects/stock-backtest/backend/scripts/seed_catalog.py
+
+### TASK-011 (DONE) - 2026-04-29T08:50
+- title: 시계열 테이블 마이그레이션 (ohlcv hypertable + fx_rates + corporate_actions)
+- assignee: coder
+- summary: SQLAlchemy 2.0 typed Mapped ORM 3종 + alembic `0002_timeseries_tables` (down_revision=0001_v3_baseline). ohlcv close NOT NULL (비거래일 방어 수집 레이어), Numeric(20,8) 가격/Numeric(20,0) 수량, timezone-aware. hypertable 변환 try/except 로 일반 PG 호환. CreateTable SQL + alembic dry-run + history 그래프 모두 PASS.
+- files: projects/stock-backtest/backend/app/models/{ohlcv.py, fx_rates.py, corporate_actions.py, __init__.py}, projects/stock-backtest/backend/alembic/versions/0002_timeseries_tables.py
+
+### TASK-030 (DONE) - 2026-04-29T08:50
+- title: Asset/Universe 도메인 모델 + Repository + 비거래일 방어 조회 레이어
+- assignee: coder
+- summary: backend/app/domain/asset/ 신규 패키지 (Asset/Universe frozen dataclass, AssetRepository Protocol 6개 메서드, calendar_guard XKRX/XNYS/CRYPTO 24-7) + backend/app/data/asset_repository.py SqlAssetRepository 구현 (의존성 역전, _to_entity 매핑 일원화, on_conflict_do_update upsert). 도메인 순수성 검증 PASS (banned imports 0). exchange_calendars 의 date_to_session(direction) API 사용.
+- files: projects/stock-backtest/backend/app/domain/asset/{__init__.py, entity.py, repository.py, calendar_guard.py}, projects/stock-backtest/backend/app/data/asset_repository.py, projects/stock-backtest/backend/app/{domain,data}/__init__.py
+- 신규 public API: AssetRepository (find_by_id, find_by_symbol_market, search, list_active, upsert, update_ingestion_state) + Universe (common_period, assets_by_currency) + calendar_guard (is_trading_day, guard_trading_day)
+
+### TASK-012 (DONE) - 2026-04-29T09:15
+- title: 백테스트 테이블 마이그레이션 (alembic 0003 - backtest_runs/equity/trades/metrics)
+- assignee: coder
+- summary: SQLAlchemy 2.0 ORM 4종 (한 파일 backtest.py - 응집도) + alembic 0003_backtest_tables (down=0002). backtest_runs(run_hash UNIQUE, status/progress/cancel_requested/error_json JSONB - 비동기 job + V2 에러 계약), backtest_equity(hypertable), backtest_trades(side CHECK IN BUY/SELL - V3 FX 미기록 정책 강제), backtest_metrics(UNIQUE run_id+name). universe JSONB 스냅샷, trades.asset_id RESTRICT. 9개 테이블 metadata 확인. alembic dry-run + history 직선.
+- files: projects/stock-backtest/backend/{app/models/{backtest.py, __init__.py}, alembic/versions/0003_backtest_tables.py}
+
+### TASK-020 (DONE) - 2026-04-29T09:15
+- title: DataSource/FxSource Protocol + yfinance 어댑터 (US/Crypto/FX)
+- assignee: coder
+- summary: backend/app/data/sources/{base.py, yfinance_source.py} - DataSource(ticker)/FxSource(통화 페어) 분리, OhlcvBar/FxBar/DividendEvent/TickerValidation frozen dataclass. close=0/null/NaN 거부 (수집 레이어 방어). module-level lock + 0.5s sleep rate limit (V1 결정 9). validate_ticker 3초 이내 검증 - SPY=True, XYZNOTEXIST=False 실측. fetch_ohlcv 10일 SPY 7 bars. USD/KRW validate_pair True. pykrx/pyupbit 후속 어댑터 plug-in 가능.
+- files: projects/stock-backtest/backend/app/data/sources/{__init__.py, base.py, yfinance_source.py}, projects/stock-backtest/backend/app/data/__init__.py
+- 신규 public API: DataSource/FxSource Protocol, OhlcvBar/FxBar/DividendEvent/TickerValidation dataclass, YfinanceSource/YfinanceFxSource
+
+### TASK-032 (DONE) - 2026-04-29T09:15
+- title: universe 시작일 교집합 자동 산출 + 한국어 통지 메시지
+- assignee: coder
+- summary: backend/app/domain/asset/period_adjustment.py - PeriodAdjustment frozen dataclass + adjust_period_for_universe() + AdjustmentReason Literal. 6 케이스 (빈 universe / start_date None / 완전 포함 / 시작일 조정 / 종료일 조정 / 양쪽 조정) 모두 PASS. 한국어 통지 메시지 (UI/UX 원칙 2), affected_assets 추적. 도메인 순수 (stdlib + entity 만).
+- files: projects/stock-backtest/backend/app/domain/asset/{period_adjustment.py, __init__.py}
+- 관찰: 양쪽 조정 시 affected_assets 중복 entry 가능 - UI dedup 또는 후속에서 affected_start/end 분리 검토
+
+### TASK-021 (DONE) - 2026-04-29T09:35
+- title: pykrx 어댑터 (KR 주식/ETF) — DataSource Protocol 구현
+- assignee: coder
+- summary: PykrxSource (DataSource structural typing 통과). KST timezone 강제, 100ms rate limit (별도 lock), 수집 레이어 방어 (close=0/null/NaN 거부). validate_ticker('069500') exists=True / ('999999') exists=False 한국어 note 실측. fetch_ohlcv 7 bars KODEX 200. fetch_dividends 빈 구현 → BLOCKER-002 SOFT 등록. adj_close = close (split/dividend 보정 향후).
+- files: projects/stock-backtest/backend/app/data/sources/{pykrx_source.py, __init__.py}, projects/stock-backtest/backend/app/data/__init__.py
+- BLOCKER-002 SOFT: pykrx 한국 ETF 분배금 미지원 — UI 에 "KR 자산 배당 미반영" 안내 필요
+
+### TASK-040 (DONE) - 2026-04-29T09:35
+- title: Portfolio + cash_by_ccy + 환전 엔진 (V3 의 핵심 도메인)
+- assignee: coder
+- summary: backend/app/domain/portfolio.py 290줄. B 모델 cash_by_ccy[ccy] + Decimal 정밀도 (float 0건). Q3 C 단계 분리 + Q5 B native 우선 (ensure_native_funds: native 충분이면 환전 0회). 20bp spread 양방향 비용. FX 미기록 (FxConversion 감사용 dataclass, side/asset_id 없음). buy/sell partial fill (cash 부족 시 max_affordable 정수, 음수 잔고 구조적 차단). 도메인 순수 (dataclasses/decimal/typing 만). 단위 검증 10/10 PASS.
+- files: projects/stock-backtest/backend/app/domain/{portfolio.py, __init__.py}
+- 신규 public API: Portfolio (cash, total_cash_in_base, positions_value_in_base, equity_in_base, convert, ensure_native_funds, buy, sell, deposit), Position, FxConversion, InsufficientFundsError, DEFAULT_FX_SPREAD_BPS, DEFAULT_SLIPPAGE_BPS
+
+### TASK-022 (DONE) - 2026-04-29T09:55
+- title: 증분 파이프라인 (백필 + 갭 감지 + 멱등 UPSERT + 비거래일 방어 수집/캘린더 + 재시도)
+- assignee: coder
+- summary: backend/app/data/pipeline.py + repositories/{ohlcv_repository, ingestion_log_repository}. MAX(time)+1부터 백필 (신규 자산 20년 lookback). 캘린더 2중 방어 (expected_days 산출 + source 응답 필터). 자산 단위 try/except + commit/rollback 격리, 3회 재시도 1·2·4초 백오프. UPSERT SQL `ON CONFLICT (asset_id,time) DO UPDATE SET...=excluded.*` 컴파일 PASS. _trading_days US 21/KR 22/CRYPTO 31 실측.
+- files: projects/stock-backtest/backend/app/data/{pipeline.py, repositories/{__init__.py, ohlcv_repository.py, ingestion_log_repository.py}, __init__.py}
+- 신규 public API: OhlcvRepository(latest_time, existing_dates, upsert_bars), IngestionLogRepository(record), backfill_asset, backfill_active_assets, IngestionResult
+
+### TASK-041 (DONE) - 2026-04-29T09:55
+- title: trade.py 거래 실행 엔진 (시장별 수수료/슬리피지 + 비거래일 방어 엔진 레이어 + 리밸런싱 시퀀스)
+- assignee: coder
+- summary: backend/app/domain/trade.py 345줄. DEFAULT_COMMISSION_BPS (KR 1.5/US 0.5/CRYPTO 10), execute_rebalance 4 헬퍼 분리 (Q3 C SELL→BUY, Q5 B native 우선, base 환전은 Portfolio.ensure_native_funds 위임). assert_trading_day_for_universe + assert_all_assets_priced 명시 에러 (silent 0 금지). is_trading_day_fn DI 로 mock 가능. 통합 미니 시나리오: KRW 1M, KR 자산 100% 매수 → 99주 + commission 148.6485 KRW + 잔여 8861.3515 KRW 정확.
+- files: projects/stock-backtest/backend/app/domain/{trade.py, __init__.py}
+- 신규 public API: DEFAULT_COMMISSION_BPS, NonTradingDayError, MissingPriceError, TradeOrder, TradeFill, commission_bps_for, assert_all_assets_priced, assert_trading_day_for_universe, execute_rebalance
+
+### TASK-042 (DONE) - 2026-04-29T09:55
+- title: calendar.py 멀티 마켓 캘린더 정렬 (base_currency 기준 + forward-fill)
+- assignee: coder
+- summary: backend/app/domain/calendar.py 105줄. BASE_CCY_TO_CALENDAR (KRW→XKRX, USD→NYSE), trading_days_in_period, align_market_price_to_base_calendar (forward-fill만 - back-fill 금지 look-ahead 방지), align_universe_prices (누락 자산은 dict 제외), next/previous_trading_day (비거래일 input 도 처리). KR 2024-01 22 거래일, forward-fill 4 케이스 (exact/ffill/ffill2/None) 모두 PASS.
+- files: projects/stock-backtest/backend/app/domain/{calendar.py, __init__.py}
+- 신규 public API: BASE_CCY_TO_CALENDAR, base_calendar_name, trading_days_in_period, align_market_price_to_base_calendar, align_universe_prices, next_trading_day, previous_trading_day
+
+### TASK-031 (DONE) - 2026-04-29T10:20
+- title: 자산 자유 추가 워크플로우 (도메인 서비스 + scheduler 큐잉)
+- assignee: coder
+- summary: backend/app/domain/asset/registration.py 도메인 서비스 (TickerValidator/BackfillEnqueuer Protocol DI - Reviewer N5) + backend/app/scheduler/backfill_queue.py (queue.Queue + threading.Thread MVP 직렬 1워커, runner 예외 격리). 6 케이스 (정상/검증실패/중복/inactive 재등록/min_history 부족/큐잉 실패) 전부 PASS. 한국어 에러 메시지 (UI/UX 원칙 2). domain.asset/__init__.py + scheduler/__init__.py append-only 갱신.
+- files: projects/stock-backtest/backend/app/domain/asset/{registration.py, __init__.py}, projects/stock-backtest/backend/app/scheduler/{backfill_queue.py, __init__.py}
+- 신규 public API: register_asset, RegistrationRequest, RegistrationResult, TickerValidationFailed, AlreadyRegistered, TickerValidator/BackfillEnqueuer Protocol, ValidationOutcome, BackfillQueue
+
+### TASK-043 (DONE) - 2026-04-29T10:20
+- title: Strategy 인터페이스 (3요소 조합) + engine.py 메인 루프 + 모델 A 구조적 강제
+- assignee: coder
+- summary: backend/app/domain/strategy.py (161줄, Allocator/SignalFilter Protocol + Strategy 3요소 + apply_filters_and_allocator AND 결합) + backend/app/domain/engine.py (263줄, run_backtest 메인 루프). 모델 A 차단 핵심 라인 engine.py L209 `prices_until_d = ctx.prices_aligned.loc[:d]` (D+1 절대 차단 — 구조적). 체결가는 별도 settlement_prices 메모리 분리. _is_rebalance_day 8 케이스 (첫날 + 6 schedule) PASS. mini end-to-end (1자산 5영업일) PASS. progress_callback / cancel_check hook 동작.
+- files: projects/stock-backtest/backend/app/domain/{strategy.py, engine.py, __init__.py}
+- 신규 public API: RebalanceSchedule, Allocator, SignalFilter, Strategy, apply_filters_and_allocator, BacktestRunContext, BacktestEquityPoint, BacktestRunResult, run_backtest
+
+### TASK-044 (DONE) - 2026-04-29T10:20
+- title: dividend.py 배당 처리 + metrics.py 메트릭 계산 (CAGR/MDD/Sharpe/Sortino/Calmar/승률/연·월)
+- assignee: coder
+- summary: backend/app/domain/dividend.py 76줄 (DividendPayment/DividendCredit + apply_dividend / apply_dividends_for_date - native currency 입금 + audit) + backend/app/domain/metrics.py 138줄 (compute_metrics 7 지표 1회 계산, _daily_returns/_max_drawdown/_cagr/_periodic_returns/_annualized 헬퍼 분리). 단위 검증: 배당 10주×$0.5→cash 100→105, CAGR=0.100 (선형), MDD=-0.182 (낙폭 시리즈), zero-division 방어, 2년치 연/월 그루핑 정상.
+- files: projects/stock-backtest/backend/app/domain/{dividend.py, metrics.py, __init__.py}
+- 신규 public API: DividendPayment, DividendCredit, apply_dividend, apply_dividends_for_date, MetricsResult, compute_metrics, TRADING_DAYS_PER_YEAR
+
+### TASK-023 (DONE) - 2026-04-29T10:45
+- title: APScheduler cron 잡 (KR 18:00 / US 07:00 / Crypto 09:00 KST)
+- assignee: coder
+- summary: backend/app/scheduler/cron_jobs.py 122줄. BackgroundScheduler + 3 CronTrigger (Asia/Seoul). on_kr/on_us/on_crypto DI 로 mock 가능. 시장별 독립 (별도 콜러블 + 별도 SessionLocal). _run_market_backfill 이 backfill_active_assets 위임. KST_TZ 상수. replace_existing=True 로 lifespan 재시작 안전. scheduler.start() 는 본 모듈 미호출 → TASK-061 lifespan 책임.
+- files: projects/stock-backtest/backend/app/scheduler/{cron_jobs.py, __init__.py}
+- 신규 public API: build_scheduler, KST_TZ
+
+### TASK-045 (DONE) - 2026-04-29T10:45
+- title: tax.py Tax plugin 인터페이스 + NoTaxPlugin 빈 구현
+- assignee: coder
+- summary: backend/app/domain/tax.py 106줄. RealizedTrade/DividendIncome/TaxResult frozen dataclass + TaxPlugin Protocol (@runtime_checkable) + NoTaxPlugin (MVP 디폴트 OFF, tax_amount=0) + apply_tax_to_portfolio 헬퍼. isinstance(NoTaxPlugin(), TaxPlugin) PASS. 도메인 순수.
+- files: projects/stock-backtest/backend/app/domain/{tax.py, __init__.py}
+- 신규 public API: RealizedTrade, DividendIncome, TaxResult, TaxPlugin Protocol, NoTaxPlugin, apply_tax_to_portfolio
+
+### TASK-050 (DONE) - 2026-04-29T10:45
+- title: Allocator base + FixedWeight 구현
+- assignee: coder
+- summary: backend/app/domain/allocators/{base.py 109줄 (AllocatorBase[P] Generic + abstract generate_weights + normalize_weights 헬퍼), fixed_weight.py 84줄 (FixedWeightParams pydantic 검증 + FixedWeight)}. params 검증 (empty/sum off/negative 모두 ValidationError). universe 교집합 정규화 (universe={1} 시 {1:1.0}). JSON Schema 출력 OK. Allocator Protocol 만족.
+- files: projects/stock-backtest/backend/app/domain/allocators/{base.py, fixed_weight.py, __init__.py}
+- 신규 public API: AllocatorBase, normalize_weights, FixedWeight, FixedWeightParams
+
+### TASK-053 (DONE) - 2026-04-29T10:45
+- title: SignalFilter base + MovingAverage 필터
+- assignee: coder
+- summary: backend/app/domain/filters/{base.py 56줄 (SignalFilterBase[P] Generic + abstract is_eligible), moving_average.py 60줄 (MovingAverageParams pydantic ge=2/le=2000, MovingAverage 가격>MA 면 PASS, price_above 토글)}. 5 케이스 (평탄/우상향/데이터부족/자산부재/우하향+price_above=False) 전부 PASS. SignalFilter Protocol 만족.
+- files: projects/stock-backtest/backend/app/domain/filters/{base.py, moving_average.py, __init__.py}
+- 신규 public API: SignalFilterBase, MovingAverage, MovingAverageParams
+
+### TASK-051 / TASK-052 (DONE) - 2026-04-29T11:00
+- title: AllWeather + EqualWeight Allocator (묶음)
+- assignee: coder
+- summary: AllWeather (Category 5종 Literal pydantic enum, DEFAULT_ALLWEATHER_WEIGHTS 30/40/15/7.5/7.5, 카테고리 내 1/N 분배, AllWeatherCategoryMissing 한국어 에러) + EqualWeight (params 없음, universe 1/N). __init__.py append-only. JSON Schema 양쪽 모두 정상.
+- files: projects/stock-backtest/backend/app/domain/allocators/{all_weather.py, equal_weight.py, __init__.py}
+- 신규 public API: AllWeather, AllWeatherParams, AllWeatherCategoryMissing, DEFAULT_ALLWEATHER_WEIGHTS, EqualWeight, EqualWeightParams
+
+### TASK-054 (DONE) - 2026-04-29T11:00
+- title: Momentum 필터 (lookback 수익률 > threshold)
+- assignee: coder
+- summary: backend/app/domain/filters/momentum.py 65줄. lookback 디폴트 126일 (~6개월), threshold 디폴트 0.0. 9 케이스 (uptrend/downtrend/threshold 0.5 strict/modest, 데이터 부족, 자산 미포함, start_price=0, NaN-leading, 음수 threshold) 모두 PASS. SignalFilter Protocol 만족.
+- files: projects/stock-backtest/backend/app/domain/filters/{momentum.py, __init__.py}
+- 신규 public API: Momentum, MomentumParams
+
+### TASK-061 (DONE) - 2026-04-29T11:00
+- title: 자산/전략 API + 스키마 모듈
+- assignee: coder
+- summary: schemas/{asset.py (AssetRead/AssetCreate/AssetSearchQuery/OhlcvPoint/AssetCreateResponse), strategy.py (StrategyDescriptor/StrategyListResponse)} + api/{assets.py (5 endpoint), strategies.py (1 endpoint)} + dependencies.py (get_db/get_*_repo) + main.py 라우터 추가. 5 엔드포인트 등록 (assets list/get/create/ohlcv + strategies list). HTTP 상태 매핑 (422/409/404/201). _RoutingValidator (KR=PykrxSource, US/CRYPTO=YfinanceSource) + _LoggingEnqueuer placeholder. JSON Schema 5 전략 (allocators 3 + filters 2) 노출.
+- files: projects/stock-backtest/backend/app/{dependencies.py, schemas/{asset.py, strategy.py}, api/{assets.py, strategies.py, __init__.py}, main.py}
+- 발견: BLOCKER-001 잔재로 DB select 시 column 부재 — endpoints/JSON Schema 까지가 SOFT 핵심. 사용자 DB 초기화 후 정상.
+
+### TASK-062 (DONE) - 2026-04-29T11:20
+- title: 백테스트 비동기 job API (POST/GET status/GET result/DELETE/GET list) + Repository + 백그라운드 runner
+- assignee: coder
+- summary: schemas/backtest.py (BacktestCreate/BacktestRun/BacktestResult/EquityPoint/TradeRecord/MetricsPayload/StrategyConfig) + data/repositories/backtest_repository.py (compute_run_hash universe sorted, BacktestRepository 모든 ORM 캡슐) + services/backtest_runner.py (execute_backtest_job + build_strategy_from_config 5 전략 라우팅 + 별도 SessionLocal progress/cancel 폴링, 데이터 로더는 placeholder MVP) + api/backtests.py (5 엔드포인트 + BackgroundTasks). DELETE 단일 동사로 cancel(pending/running) + delete(완료) 의미 분기. error_json (stage/type/message/request_ctx/trace_id) V2 살림. OpenAPI 7 components 신규.
+- files: projects/stock-backtest/backend/app/{schemas/backtest.py, data/repositories/backtest_repository.py, services/{__init__.py, backtest_runner.py}, api/{backtests.py, __init__.py}, main.py}
+- 신규 public API: BacktestRepository, compute_run_hash, execute_backtest_job, build_strategy_from_config + 5 엔드포인트
+- 발견: 데이터 로더 (ohlcv → prices_aligned + fx_rates_to_base) placeholder — TASK-100 통합에서 보강 필요
+
+### TASK-090 (DONE) - 2026-04-29T11:20
+- title: Next.js 추가 설정 (Zod 스키마 + API 클라이언트 + shadcn/ui 7종 + 한국어 i18n)
+- assignee: coder
+- summary: lib/api/{schemas, client}.ts (Zod 백엔드 OpenAPI 동기, ApiError trace_id 보존) + lib/i18n/ko.ts (한국어 dict + t 헬퍼) + lib/utils.ts (cn) + components/ui/{button, input, card, label, select, badge, toast}.tsx (shadcn 표준 cva + tailwind) + app/{layout.tsx (ToastProvider), page.tsx (한국어 3-카드)}. tsc/build/dev 모두 PASS. 한국어 4 문자열 노출 확인.
+- files: projects/stock-backtest/frontend/{lib/{utils.ts, api/{schemas.ts, client.ts}, i18n/ko.ts}, components/ui/*.tsx (7개), app/{layout.tsx, page.tsx}}
+- 신규 public API: api.{health, listAssets, getAsset, createAsset, listStrategies}, ApiError, Zod schemas, ToastProvider/useToast, shadcn Button/Card/Input/Select/Badge/Label
+
+### TASK-080 / TASK-082 (DONE) - 2026-04-29T11:55
+- title: 백테스트 골든 스냅샷 9 케이스 + API 계약/비동기 통합 스모크
+- assignee: tester
+- summary: 17 통과 / 16 SOFT skip / 0 실패. TASK-080 12/12 PASS (3 시나리오 × 3 전략 + 3 invariant), 9 스냅샷 JSON 생성 (rel_tol=1e-4). TASK-082 5/5 비-DB PASS (health/strategies/openapi/fuzz×2), 16 DB-의존 SOFT skip (BLOCKER-001 잔재). schemathesis 3.39.16 핀 (pytest 9 충돌 회피 + force_schema_version="30"). 클린 아키텍처 위반 0.
+- files: projects/stock-backtest/backend/{tests/conftest.py, tests/golden/{test_golden_scenarios.py, snapshots/}, tests/api/test_api_contract.py, requirements.txt}
+- Tester severity=blocker (BLOCKER-001 잔재 영향 — 이미 등록, 사용자 액션 영역. 신규 코드 결함 아님)
+- observation: 합성 시계열 vol≈0 으로 Sharpe 비현실적 (실데이터 무관), 워커 크래시 복구 미구현 (Phase 2 Celery 권장), 데이터 로더 placeholder (TASK-100 예정)
+
+### TASK-091 (DONE) - 2026-04-29T11:55
+- title: 자산 카탈로그 화면 (시장 필터 + 검색 + 자산 추가 다이얼로그)
+- assignee: coder
+- summary: app/assets/page.tsx + components/asset/{AssetTable, AddAssetDialog}.tsx. 시장 필터 + 한글명/심볼 검색 + 인라인 모달 (Radix 의존성 회피). UI/UX 원칙 1·2·3 적용 (JSON 0, 한국어 라벨, 로딩/검증/등록 진행 상태 toast). ApiError 422→notFound / 409→duplicate / else→generic 한국어 매핑 + 추적 ID. tsc/build/curl 모두 PASS, /assets 19.8 kB 정적.
+- files: projects/stock-backtest/frontend/{app/assets/page.tsx, components/asset/{AssetTable.tsx, AddAssetDialog.tsx}}
+- 발견: Zod .default({}) 가 input/output 타입 불일치 → Awaited<ReturnType> 패턴 우회. 후속 cleanup observation (schemas.ts .default→.optional)
+
+### TASK-081 (DONE) - 2026-04-29T11:42
+- title: look-ahead 회귀 + 비거래일 방어 4단계 + cash_by_ccy 환전 단위 회귀 테스트
+- assignee: tester
+- summary: 50/50 회귀 PASS, 0 결함. SpyAllocator/SpyFilter 로 매 호출 시 prices.index.max() ≤ signal_date 검증 — D+1 노출 0건 (engine.py L209 모델 A 구조적 차단 작동). 비거래일 4단계 방어 (수집 _is_invalid_close / 캘린더 _trading_days 2차 / 조회 guard_trading_day 3 모드 / 엔진 assert_* + slicing) 전부 동작. fx_spread 정확치 (1.3M KRW @ 1300 → 998 USD). Q3 C + Q5 B 단계 분리 + native 우선 정상. 전체 회귀 67 passed/16 skipped 영향 없음.
+- files: projects/stock-backtest/backend/tests/regression/{__init__.py, test_lookahead.py, test_calendar_defense.py, test_cash_by_ccy.py}
+- 환경: .venv/bin/python 필수 (anaconda3 글로벌 미사용)
+
+### TASK-092 (DONE) - 2026-04-29T11:42
+- title: 백테스트 생성 화면 (전략/파라미터/universe/기간/base_currency/리밸런싱)
+- assignee: coder
+- summary: app/backtests/new/page.tsx + components/backtest/{StrategyParamsForm, UniverseSelector}.tsx + lib/api/{schemas,client}.ts append (BacktestCreate/Run, api.createBacktest/getBacktest). 6 키워드 (새 백테스트/전략 선택/자산 선택/기축통화/리밸런싱 주기/백테스트 실행) HTML grep PASS. tsc/build/curl 모두 PASS. /backtests/new 4.04 kB.
+- files: projects/stock-backtest/frontend/{app/backtests/new/page.tsx, components/backtest/{StrategyParamsForm,UniverseSelector}.tsx, lib/api/{schemas,client}.ts}
+- observation: dict/array 파라미터 (FixedWeight weights) 임시 JSON-string 입력 — 후속 AssetWeightMap 위젯 권장 (UI/UX 원칙 1 잠재 위반). filter 선택 UI 미구현 (filter_configs:[] 고정).
+
+### TASK-093 (DONE) - 2026-04-29T11:55
+- title: 백테스트 결과 화면 (equity / drawdown / 지표 / 월별 히트맵 / 거래 테이블)
+- assignee: coder
+- summary: app/backtests/[run_id]/page.tsx + components/backtest/{EquityChart, DrawdownChart, MetricsTable, MonthlyHeatmap, TradesTable}.tsx + lib/api/{schemas,client}.ts append (BacktestResult/EquityPoint/TradeRecord/MetricsPayload, getBacktestResult). recharts 활용 (선형/로그 토글, drawdown area). 통화 그룹 필터 + 페이지네이션. ko.metric.* 한국어 라벨. 4 파일 5종 카드 모두 구현. tsc/build/curl 모두 PASS, /backtests/[run_id] 106 kB.
+- files: projects/stock-backtest/frontend/{app/backtests/[run_id]/page.tsx, components/backtest/{EquityChart,DrawdownChart,MetricsTable,MonthlyHeatmap,TradesTable}.tsx, lib/api/{schemas,client}.ts}
+- 발견: fetchAndValidate Zod input/output 타입 변이 → MetricsTable props loose 우회. 다음 client.ts 한 줄 fix 권장.
+
+### TASK-094 (DONE) - 2026-04-29T11:55
+- title: 진행률 폴링 + in-place 패널 + 한국어 에러 가이드 + 취소 버튼
+- assignee: coder
+- summary: lib/i18n/ko.ts append (progress 19키 + errorGuide 5키) + lib/api/client.ts append (cancelBacktest) + hooks/useBacktestPolling.ts (1s 폴링, terminal status 종료) + components/backtest/ProgressPanel.tsx (6 분기 pending/running/done/failed/cancelled/error) + app/backtests/new/page.tsx 수정 (submittedRunId state + JSX 분기). done 시 1.5s 후 자동 라우팅 → /backtests/[run_id]. 화면 3개 한도 유지 (별도 진행 화면 안 만듦, UI/UX 원칙 6).
+- files: projects/stock-backtest/frontend/{lib/i18n/ko.ts, lib/api/client.ts, hooks/useBacktestPolling.ts, components/backtest/ProgressPanel.tsx, app/backtests/new/page.tsx}
+- 신규 public API: useBacktestPolling, ProgressPanel, api.cancelBacktest
+
+### TASK-100 (DONE) - 2026-04-29T12:10
+- title: end-to-end 통합 (데이터 로더 보강 + README 7단계 + smoke_e2e + backtest_runner placeholder 해소)
+- assignee: coder
+- summary: services/data_loader.py 215줄 (load_universe_market_meta/load_prices_aligned/load_fx_rates_to_base/build_backtest_context — base 캘린더 정렬 + forward-fill + fx 환율 로드). backtest_runner.py 의 pd.DataFrame() placeholder 와 ("US", base_currency) 메타 placeholder 를 build_backtest_context 호출로 교체 + load_market_data stage 추적. scripts/smoke_e2e.py (사용자 BLOCKER-001 해소 후 수동 실행). README 90→163줄 7단계 빠른 시작 + 화면 3개 + 전략 5종 + Phase 분리. 회귀 + 골든 62 PASS 유지.
+- files: projects/stock-backtest/{backend/app/services/{data_loader.py, backtest_runner.py}, backend/scripts/smoke_e2e.py, README.md}
+- 핵심 발견: FxRate(base=USD, quote=KRW).rate=1300 이 정확히 base_per_ccy=KRW per USD 와 일치 (도메인 컨벤션 검증)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

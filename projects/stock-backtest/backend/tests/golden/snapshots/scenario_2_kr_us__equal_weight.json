@@ -1,0 +1,12 @@
+{
+  "aborted": false,
+  "cagr": 0.08984,
+  "final_equity": 15330753.8964,
+  "mdd": 0.0,
+  "num_equity_points": 1231,
+  "num_fills": 10,
+  "scenario": "scenario_2_kr_us",
+  "sharpe": 1219.064586,
+  "strategy": "equal_weight",
+  "win_rate": 1.0
+}

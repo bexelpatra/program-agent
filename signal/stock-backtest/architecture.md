@@ -478,3 +478,318 @@ OpenAPI-first. `docs/openapi.yaml` 을 먼저 확정하고 라우트 구현.
 - 삭제 전략: `dynamic/momentum.py`, `dynamic/dual_momentum.py`, `dynamic/risk_parity.py`, `dynamic/vaa.py`, `dynamic/moving_average/{crossover,multi_crossover,seasonal}.py`, `dynamic/moving_average/_common.py`, `static/permanent.py`
 - 관련 테스트: `tests/test_*web*`, 삭제 전략 단위/통합 테스트
 - `data/`, `ohlcv`, `assets`, `fx_rates`, `market_events`, `backtest_runs` 등 **DB 데이터는 전부 보존**
+
+---
+
+# V3 Reset (2026-04-29~)
+
+V1 (Dash 웹, 사용성 부족) 과 V2 (FastAPI-only, UI 부재) 의 양 극단 실패를 교훈 삼아, V3 는 **비개발자 친화 풀스택 (FastAPI 백엔드 + Next.js 프런트)** 으로 재출발한다. 이 V3 섹션이 이후 설계의 **유일한 진실**이며, 상충 시 V3 를 우선 적용한다. V1/V2 섹션은 히스토리 보존 목적.
+
+## V3 미션 (Quant Lab)
+
+`projects/stock-backtest/CLAUDE.md` 의 미션을 그대로 인용:
+
+> 비개발자 금융 사용자를 위한 퀀트 투자 웹앱. 핵심 기능은 **정적 자산 배분(SAA)**, **동적 자산 배분(DAA)**, **백테스팅** 세 가지이며 이 세 가지는 어떤 변경에도 항상 동작해야 한다.
+
+V3 의 5개 절대 원칙 (CLAUDE.md L6-26):
+1. JSON/코드를 사용자에게 노출하지 않는다 (모든 전략 구성은 UI 폼)
+2. 모든 전략은 3요소 조합: `allocator` + `signal_filters[]` (AND) + `rebalance_schedule`
+3. 백테스팅 실거래 반영도 최소 70% (수수료/슬리피지/look-ahead/배당/환율)
+4. 결과 지표: CAGR, MDD, Sharpe, Sortino, Calmar, 승률, 연/월 수익률
+5. MVP 프리셋 — Allocator 3종 (FixedWeight/AllWeather/EqualWeight) + Filter 2종 (MovingAverage/Momentum)
+
+## V3 클린 코드 / 유지보수 원칙
+
+V1/V2 에서 누적된 모순을 정리하고 다음 원칙을 강제한다:
+
+1. **데이터 모델은 도메인 풍부도, UI 는 사용자 친화도 — 둘을 분리한다.** assets 테이블은 풍부한 분류(asset_type, currency, market, kr_tax_class) 보유. UI 노출은 사용자 지식 수준에 맞춰 점진 확장.
+2. **UI/UX First**. 모든 신규 기능은 비개발자 사용자가 이해 가능한 UI 로 설계. 자세한 원칙은 § "V3 UI/UX 원칙" 참조.
+3. **세금/수집/fx 등은 plugin 인터페이스로 시작**. MVP 가 빈 구현이거나 단일 구현이라도 추후 확장 가능한 추상화를 처음부터 도입.
+4. **에이전트 위임 영역의 자율성**. Manager 와 사용자가 직접 결정한 영역(자산 도메인 + 현금/FX) 외는 V1/V2 결정 + V3 원칙 + Quant Lab CLAUDE.md 를 참조해 Coder/Tester/Reviewer 가 자체 결정. 차단 사유는 `signal/stock-backtest/blockers.md` 에 HARD/SOFT 구분으로 기록.
+
+---
+
+## V3 자산 도메인 모델
+
+### 자산 분류 체계 (DB 풍부 / UI 단순)
+
+DB `assets` 컬럼:
+- `asset_id` PK
+- `symbol` (yfinance/pykrx ticker), `(symbol, market)` UNIQUE
+- `market` ∈ {`KR`, `US`, `CRYPTO`} — UI 노출 기준
+- `asset_type` ∈ {`EQUITY_INDEX`, `ETF`, `BOND`, `COMMODITY`, `CRYPTO`, ...} — 내부 분류, 추후 UI 세분화 시 활용
+- `currency` ∈ {`KRW`, `USD`, ...} — native currency, 환전 계산 기준
+- `name` — 한글 표시명
+- `meta` JSONB — `kr_tax_class` 등 미래 확장 (한국 상장 해외 ETF 세금 분류 등)
+- `active` — 카탈로그 노출 여부
+- `start_date`, `last_ingested_at`
+
+UI 분류 (MVP):
+- 시장(한국/미국/암호화폐) 단위로만 노출
+- ETF/지수/채권 등 자산 타입 세분화는 Phase 2 이후 사용자 지식 성장 시 노출 검토
+
+### 자산 카탈로그 + 사용자 자유 추가 (하이브리드)
+
+- **카탈로그 (큐레이션)**: KR 주요 ETF (KODEX 200/KODEX 미국 S&P500 등), US 핵심 ETF (SPY/QQQ/TLT/GLD/DBC 등), 주요 암호화폐 (BTC/ETH 등) 50~100개 시드
+- **사용자 자유 추가 워크플로우**:
+  1. **즉시 검증** (3초 이내): yfinance/pykrx 에 ticker 존재 + 최소 1년치 일봉 데이터 유무 확인. 실패 시 즉시 에러 ("티커 'XYZ' 를 찾을 수 없습니다")
+  2. **비동기 백필**: 검증 통과 시 `assets.active=true` 등록 + 백그라운드 백필 큐잉. UI 에는 "등록됨, 데이터 백필 중 (XX%)" 표시
+  3. **부분 사용 가능**: 백필 진행 중에도 백필된 기간만큼 백테스트 가능 (자동 교집합)
+
+### universe 정의
+
+universe = 백테스트 1회에 사용할 자산 묶음. 백테스트 생성 폼에서 사용자가 자산 선택해 구성.
+
+### universe 시작일 불일치 — 자동 교집합 + 통지
+
+- universe 자산 시작일 다를 때 가장 늦은 시작일로 백테스트 기간 자동 조정
+- 사용자에게 명시적 알림: "BTC 데이터 시작일이 2014-01-01 이라 백테스트 기간을 2014-01-01 ~ 로 조정했습니다"
+
+### 멀티 마켓 캘린더 — base_currency 기준
+
+- 백테스트 기준 캘린더 = `base_currency` 의 시장 캘린더
+  - base=KRW → 한국 거래일 캘린더 (XKRX)
+  - base=USD → 미국 거래일 캘린더 (NYSE)
+- 비base 시장 자산은 base 캘린더 거래일 행에 **직전 자기 시장 거래일 종가 forward-fill**
+  - 예: base=KRW 의 D 일 행에 표기되는 SPY 가격 = D-1 일 미국 종가 (한국 시간 D 일 새벽 발표)
+- 암호화폐는 24/7 시장이므로 base 캘린더 D 일의 UTC 00:00 종가 사용
+
+---
+
+## V3 현금 / FX 모델
+
+### B 모델 — Native currency 보유 + base_currency 환산
+
+- 자산은 native currency 로만 체결·보유 (SPY=USD, KODEX200=KRW, BTC=USD)
+- 현금은 currency 별 분리: `cash_by_ccy[KRW]`, `cash_by_ccy[USD]`, ...
+- 매일 base_currency 로 equity 환산 저장 (각 자산 native value × 당일 fx_rate)
+
+### base_currency 사용자 선택 (디폴트 없음)
+
+백테스트 생성 시 사용자가 명시 (`KRW` / `USD` / 기타). 디폴트 강제 안 함. UI 에서 사용자별 마지막 선택값 기억해 다음 백테스트 시 프리셀렉트 가능.
+
+### FX 거래는 trade 로 기록하지 않음 (잔고 이동 + 스프레드 차감)
+
+- 리밸런싱 시 통화 이동 필요하면 엔진 내부에서 `cash_by_ccy` 잔고 이동 + `fx_spread_bps` 차감
+- `backtest_trades` 테이블에는 자산 매매(BUY/SELL)만 기록
+- equity 저하로만 환전 비용 반영
+
+### 환전 정책 — 단계 분리 (C) + native 우선 (Q5-B)
+
+리밸런싱 흐름:
+1. 모든 매도 실행 → native currency 잔고로 입금
+2. 같은 native currency 의 매수가 동일 리밸런싱에 있으면 **native 잔고 직접 활용** (환전 안 함)
+3. native 잔고 부족 시 base_currency 로 환전 → 부족분만큼 다시 매수 native currency 로 환전 (환전 비용 양방향 발생)
+4. 매수 실행
+
+### fx_spread_bps = 20bp (defaults.yaml)
+
+한국 증권사 환전 우대 평균 가정. 사용자가 변경 가능.
+
+### 환율 시점 = 체결일 fx_rate 1개
+
+- 일봉 fx_rate 만 사용 (시가/종가 구분 없음)
+- 체결일 종가 fx_rate 로 환산
+
+### fx 데이터 어댑터 (yfinance 디폴트, 교체 가능)
+
+- MVP: yfinance "KRW=X" 등으로 일봉 환율 수집
+- 갭 처리: 주말/공휴일 → 직전 영업일 환율 forward-fill
+- 추후 한국은행 OpenAPI / FRED 어댑터 추가 가능 (어댑터 인터페이스 분리)
+
+---
+
+## V3 거래 정책
+
+### Long-only, 음수 잔고 금지
+
+- 매수 주문이 cash_by_ccy 잔고 초과 시 **가능한 만큼만 체결**, 나머지는 비중 미달로 결과에 노출
+- 공매도/마진 미지원
+
+### 1주 단위 정수, 잔여 cash 누적
+
+- 모든 자산 1주 단위 정수 매매
+- 비중 100% 정확히 못 채우는 잔액은 base_currency 잔고로 누적 (다음 리밸런싱에 활용)
+- 암호화폐도 1코인 단위 — BTC 1개당 가격이 크면 작은 universe 비중에서 매수 안 될 수 있음을 UI 에 안내
+
+### 시그널 / 체결 시점 — 모델 A (D 종가 시그널 → D+1 시가 체결)
+
+V3 CLAUDE.md L20 원안 유지:
+- D 일 종가까지의 데이터로 시그널 판정
+- D+1 일 시가에 체결
+- look-ahead 0 (시그널 결정 시점에 체결가는 모름)
+
+엔진 규약:
+- `generate_signal(prices_until_D)` 함수에 D+1 일 데이터를 절대 넘기지 않음 (구조적 차단)
+- Tester 는 모든 전략에 대해 "D+1 데이터 노출 시 시그널 변화 없음" 회귀 테스트 필수
+
+멀티 마켓 적용:
+- 한국 자산 KODEX200: D 일 한국 종가 → D+1 한국 시가 체결
+- 미국 자산 SPY: D 일 미국 종가 → D+1 미국 시가 체결 (base=KRW 캘린더 정렬 시 한 칸 어긋남이 자연스럽게 흡수됨)
+- 단순화 표현: "각 자산은 자기 시장의 다음 거래일 시가에 체결"
+- BTC: D 일 UTC 00:00 종가 → D+1 일 UTC 00:00 종가 (24/7 시장이라 시가/종가 구분 없음)
+
+### 수수료 / 슬리피지 (V3 CLAUDE.md 디폴트)
+
+- 수수료: 한국 0.015% / 미국 0.005% / 암호화폐 0.1% (market 별 자동 적용)
+- 슬리피지: 0.1% (사용자 조정 가능)
+- 둘 다 `defaults.yaml` 에서 시장별 오버라이드 가능
+
+### 배당 처리
+
+- 배당은 native currency 현금으로 수령 → `cash_by_ccy` 입금
+- 다음 리밸런싱에 자동 편입
+- yfinance dividends 사용. `corporate_actions` 테이블에 기록
+
+---
+
+## V3 백엔드 모듈 분할 (engine 분리 정책)
+
+Quant Lab CLAUDE.md L39 의 `engine.py # 백테스팅 엔진 (단일 파일 유지)` 표현은 V3 에서 **"백테스트 메인 루프를 분산하지 마라"** 로 재해석한다 (V3 우선 원칙 L486 적용). 도메인 모델은 별도 파일로 분리해 책임을 단일화한다.
+
+`backend/app/domain/` 모듈 분할:
+
+| 파일 | 책임 | 담당 태스크 |
+|------|------|-------------|
+| `engine.py` | 백테스트 **메인 루프만** (시그널 호출 → 리밸런싱 → 거래 실행 → equity 기록 → 진행률/취소 체크). 도메인 모델 직접 정의 금지, 전부 import. | TASK-043 (Strategy 인터페이스를 호출하는 루프 골격) |
+| `portfolio.py` | Portfolio 클래스 + `cash_by_ccy` 잔고 관리 + 환전 엔진 (단계 분리 C + native 우선 B + fx_spread 20bp). FX 는 잔고 이동, trade 미기록. | TASK-040 |
+| `trade.py` | 거래 실행 로직 (long-only, 음수 잔고 금지, 정수 주, 부족 시 가능한 만큼만 체결, 잔여 cash 누적, 수수료·슬리피지 시장별 자동 적용). | TASK-041 |
+| `calendar.py` | 멀티 마켓 캘린더 정렬 (base_currency 기준 + 비base 시장 forward-fill, exchange_calendars 사용, 비거래일 방어 — 엔진 레이어). | TASK-042 |
+| `strategy.py` | Strategy 인터페이스 (allocator + filters AND + rebalance_schedule), Allocator base, Filter base. 시그널/체결 모델 A 구조적 차단 (`generate_signal(prices_until_D)` 슬라이싱 강제). | TASK-043 |
+| `allocators/{fixed_weight,all_weather,equal_weight}.py` | Allocator 구현 3종. | TASK-050, 051, 052 |
+| `filters/{moving_average,momentum}.py` | Filter 구현 2종. | TASK-053, 054 |
+| `metrics.py` | 메트릭 계산 (CAGR/MDD/Sharpe/Sortino/Calmar/승률/연·월 수익률). | TASK-044 |
+| `dividend.py` | 배당 처리 (corporate_actions 기록 → cash_by_ccy 입금 → 다음 리밸런싱 편입). | TASK-044 |
+| `tax.py` | Tax plugin 인터페이스 + NoTaxPlugin. | TASK-045 |
+
+**병렬 안전성**: 위 매핑으로 TASK-040~045 가 서로 다른 파일을 수정하므로 의존성 순서만 지키면 동시 충돌 없음. `engine.py` 는 TASK-043 가 만들지만 다른 모듈을 import 만 하므로 이후 태스크가 추가 import 만 하면 됨.
+
+---
+
+## V3 세금 모듈 (Plugin 인터페이스)
+
+### MVP: 디폴트 OFF, 빈 구현
+
+- `Tax` plugin 인터페이스 정의 (`apply(realized_trades, dividends, year) -> tax_amount`)
+- MVP 디폴트 구현 = `NoTaxPlugin` (세금 0)
+- UI 에서 "세후 수익률 계산" 토글 (디폴트 OFF)
+
+### 추후 확장 가능 항목 (Phase 3+)
+
+- **한국 거주자 세금**: 해외 양도세 22% (250만원 공제), 배당 15.4%, 한국 상장 해외 ETF (kr_tax_class 별 차등), 암호화폐 양도세 (시행 시점 확정 후)
+- 사용자가 본인 세법 무지로 MVP 에서 제외했으나 의사결정 본질에 영향이 큰 영역. plugin 추가 시 즉시 활성 가능하도록 인터페이스만 선설계
+
+---
+
+## V3 UI / UX 원칙
+
+V1 의 Dash 사용성 부족과 V2 의 UI 부재를 피하기 위한 명시적 원칙. **모든 화면 설계 시 이 6개 원칙을 통과해야 한다.**
+
+### 1. JSON / 코드 노출 금지
+- 전략 구성은 항상 폼 (드롭다운 + 슬라이더 + 체크박스)
+- 자산 입력은 검색 위젯 (자동완성, 한글명 검색 지원, ticker 직접 입력은 "자유 추가" 버튼 분리)
+- 비중 입력은 숫자 + 슬라이더 + 합 100% 자동 검증/정규화
+
+### 2. 비개발자 한국어 우선
+- 모든 라벨/에러 메시지/안내 한국어 기본
+- 영어 전문 용어는 괄호 병기 ("샤프지수(Sharpe Ratio)")
+- 에러는 액션 가능한 가이드 형태 ("티커 'XYZ' 를 찾을 수 없습니다. yfinance 검색에서 유효한 ticker 인지 확인하세요" 식)
+
+### 3. 진행 상태 가시화
+- 자산 백필 진행률 (XX%)
+- 백테스트 실행 진행률 (V2 비동기 job 모델: POST → run_id → 폴링)
+- 데이터 갭/조정 통지 (예: "BTC 시작일 때문에 기간 조정됨")
+
+### 4. 결과 시각화 (V3 CLAUDE.md L24)
+- equity curve (선형 차트, log 토글)
+- drawdown (선형 차트)
+- 지표 테이블: CAGR, MDD, Sharpe, Sortino, Calmar, 승률
+- 연/월 수익률 히트맵
+- 거래 내역 테이블 (페이지네이션, 통화별 그룹)
+
+### 5. 폼 검증 (Zod 런타임)
+- 프런트 Zod 스키마로 백엔드 Pydantic 과 동기 (V3 CLAUDE.md 코드 규칙)
+- 입력 시점 즉시 피드백 (제출 후 아니라)
+
+### 6. 점진적 노출
+- MVP 화면 3개만: ① 백테스트 생성 ② 결과 보기 ③ 자산 카탈로그
+- 사용자 지식 성장 시 추가 노출 (asset_type 세분화, 세금 토글, fx 어댑터 선택, 수수료 오버라이드 등)
+
+---
+
+## V3 에이전트 위임 영역
+
+이번 대화에서 결정 안 한 영역은 다음 가이드에 따라 Manager / Coder / Tester / Reviewer 가 자체 진행. 차단 사유는 `signal/stock-backtest/blockers.md` 에 HARD/SOFT 구분 기록.
+
+| 영역 | 가이드 |
+|------|--------|
+| DB 스키마 | V1 § "DB 스키마 (요약)" + 위 자산 도메인 모델 반영 |
+| API | V2 § "V2 API (FastAPI)" 참조. OpenAPI-first. 비동기 job 모델. 에러 응답 계약 (stage/ctx/trace_id) |
+| 데이터 수집 | V1 § 결정 9 (DB 기반 증분, cron, 갭 감지, 멱등 UPSERT) + 비거래일 다층 방어 (V1 결정 13) |
+| 전략 인터페이스 | V3 CLAUDE.md 3요소 (allocator + filters AND + rebalance_schedule) + V2 § "V2 전략 조합" SignalMask |
+| 프런트 | V3 CLAUDE.md 디렉토리 (Next.js App Router + shadcn/ui + Zod) + 위 UI/UX 원칙 6개 강제 |
+| 테스트 | V3 CLAUDE.md "골든 테스트" + V2 schemathesis fuzz + look-ahead 회귀 테스트 |
+
+### Blocker 정책
+
+- `blockers.md` 형식 (append-only):
+  ```markdown
+  ## BLOCKER-001 [HARD|SOFT] (TASK-XXX)
+  - 발견 시점: YYYY-MM-DD
+  - 차단 영역: (DB 스키마 / API / 프런트 / ...)
+  - 사유: (왜 사용자 판단이 필요한가)
+  - 우회 방안: (SOFT 일 때만, mock/빈 구현으로 진행할 방법)
+  - 처리 결과: TODO | RESOLVED (날짜)
+  ```
+- **HARD**: 선결되지 않으면 진행 불가능 → 즉시 멈추고 Manager 가 사용자에게 보고
+- **SOFT**: mock/빈 구현으로 우회 가능 → 우회 + 해당 task-board 에 TODO 등록 + 계속 진행
+- 모든 태스크 완료 후 Manager 가 blockers 재독 → 자체 처리 시도 → 잔여 blocker 만 사용자 보고
+
+---
+
+## V3 Phase 분리
+
+| Phase | 범위 |
+|-------|------|
+| **Phase 1 (MVP)** | Allocator 3종 (FixedWeight, AllWeather, EqualWeight) + Filter 2종 (MovingAverage, Momentum) + 백엔드 (FastAPI + DB + 데이터 수집 cron + 백테스트 엔진) + 프런트 (Next.js + 화면 3개) + Tax plugin 인터페이스 (빈 구현) |
+| **Phase 2** | 계절성 분석 (V1 결정 12 의 정치 사이클·FOMC·Sell-in-May·실적시즌·한국 정치) + market_events 테이블 + 분석 페이지 |
+| **Phase 3+** | 한국 거주자 세금 plugin 구현, asset_type UI 세분화, 추가 allocator/filter, 한국은행 fx 어댑터, 다중 전략 합성 (composer) UI |
+
+---
+
+## V1 / V2 결정 — 폐기 / 살림 일람
+
+### V1 폐기
+- Dash 웹 (`src/stock_backtest/web/`) 전체
+- `_CASH_` 문자열 컬럼 방식 (V2 폐기, V3 도 cash_by_ccy 잔고)
+- FX TradeRecord 스키마 (V2 폐기, V3 도 trade 미기록)
+- dynamic 전략 5종 (momentum/dual_momentum/vaa/risk_parity/moving_average 변형) — Phase 3 재검토
+
+### V1 살림
+- assets 풍부 분류 (asset_type, market, currency, kr_tax_class)
+- ohlcv hypertable (TimescaleDB)
+- 데이터 수집 cron (KR 18:00 / US 07:00 / Crypto 09:00 KST, 자산 단위 3회 재시도, 갭 자동 감지)
+- 비거래일 다층 방어 (수집/캘린더/조회/엔진 4단계)
+- exchange_calendars 사용
+- 재현성 (code_commit_hash + data_hash + STALE 플래그)
+- backtest_runs.run_hash 캐싱
+
+### V2 폐기
+- "FastAPI-only, 웹 제거" → V3 는 Next.js 프런트 부활
+- Cash NamedTuple 타입화 → V3 는 cash_by_ccy[ccy] 딕셔너리로 단순화
+- AND composer (SignalMask) 즉시 구현 → V3 Phase 1 은 단일 전략(allocator + filters AND) 만, 다중 전략 합성은 Phase 3+
+
+### V2 살림
+- 에러 응답 계약 (stage/ctx/trace_id, 전역 예외 핸들러)
+- 비동기 job 모델 (POST → run_id → 폴링, 진행률, 취소)
+- OpenAPI-first 개발 (docs/openapi.yaml 먼저 확정)
+- Golden snapshot 테스트 + schemathesis fuzz
+- 검증 포인트 (동시 job 독립성, 취소 시 트랜잭션 정리, 워커 크래시 복구)
+
+---
+
+## V3 현재 상태
+
+- 사용자와 자산 도메인 + 현금/FX 핵심 결정 완료 (Q1~Q16)
+- architecture.md V3 섹션 작성 완료 (2026-04-29)
+- 다음 단계: task-board.md 분해 → Reviewer 검증 → Coder/Tester 위임 루프 시작
