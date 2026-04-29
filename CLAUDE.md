@@ -144,6 +144,7 @@ program-agent/
 - 태스크 간 의존성이 있으면 `Depends On`에 명시한다.
 - 태스크는 하나의 에이전트가 한 번에 처리할 수 있는 크기로 분해한다.
 - **의존성 검증**: 프로젝트 초기화 태스크 완료 직후, 의존성 설치 및 import 검증을 수행한다.
+- **데이터 공급/소비 경계 명시**: API/UI/엔진 태스크가 도메인 함수를 호출하기 전, **데이터 공급 (ETL/어댑터/로더)** 태스크를 의존성에 명시한다. 임시 placeholder 우회 (예: 빈 DataFrame 으로 함수 시그니처만 채움) 는 별도 후속 태스크로 분리하지 말고, 공급 태스크의 일부로 통합한다. 이를 무시하면 placeholder 가 통합 단계까지 미뤄지면서 e2e 검증이 NotImplemented 로 실패한다.
 - **실측 인용 의무**: 태스크 description에 **구체 수치·파일 경로·라인 번호·심볼·개수·임계값**을 기재할 때는 기억/추정이 아니라 반드시 `Read`·`Grep`·`ls`·`Bash`로 **직전에 실측한 결과**를 인용한다. 실측 없이 적은 숫자는 Reviewer가 NEEDS_REVISION으로 돌려보내므로 Coder/Tester 호출이 지연된다. 예: "Section C 행 수 == 61 (map L139 실측)", "L337-L342 bare-id 경로". 모호한 표현("대략 50여 건", "L300 부근")은 금지.
 
 ### Step 3: 태스크 실행
@@ -154,6 +155,7 @@ program-agent/
    - Reviewer 판정이 **PASS**일 때에만 다음 단계로 진행.
    - **NEEDS_REVISION**이면 Manager가 지적 사항을 반영해 산출물을 수정하고 Reviewer를 재호출한다. PASS 이전에는 Coder/Tester를 절대 호출하지 않는다.
    - **ESCALATE**이면 사용자에게 판단을 요청한다.
+   - **마일스톤 재검증 권장**: 사전 검증 (task-board 분해 후) 1회 외에도 다음 시점에는 Reviewer 재호출을 권장한다 — (1) **도메인 코어 완료** 직후 (예: engine.py 와 모든 의존 모듈 DONE), (2) **통합 직전** (마지막 e2e 통합 태스크 시작 전). 자율 진행 모드에서 Coder report 의 "DONE" 주장만 신뢰하지 않고, Reviewer 가 코드/테스트 결과의 일관성을 독립 검증하도록 한다.
 3. 대상 에이전트의 프롬프트 템플릿(`agents/*.md`)을 읽는다.
 4. Agent tool로 서브에이전트를 호출한다.
 
@@ -210,8 +212,9 @@ Agent tool 호출:
    - **BLOCKED**: 블로커를 해결할 태스크를 새로 생성한다.
 
 3. **Tester 발견 이슈 자동 태스크화**: Tester report frontmatter의 `severity` 필드를 기준으로 판단한다.
-   - `severity: blocker` 또는 `severity: bug` → Manager는 **반드시** 수정 태스크를 `task-board.md`에 등록하고 Coder에게 할당한다. Tester 본문 어투("관찰/참고용" 등)와 무관하게 강제.
+   - `severity: blocker` 또는 `severity: bug` → Manager는 **반드시** 수정 태스크를 `task-board.md`에 등록하고 Coder에게 할당한다. Tester 본문 어투("관찰/참고용" 등)와 무관하게 강제. **단 `environment` 인 경우는 코드 수정 태스크를 만들지 않는다 (아래 참조).**
    - `severity: observation` → Manager 판단. 즉시 태스크화하거나 retrospective로 이월한다.
+   - `severity: environment` → 코드 결함이 아닌 환경/인프라 미적용 (DB 마이그레이션 미실행, 환경 변수 미설정, 외부 서비스 미가동 등). Manager 가 후속 코드 수정 태스크를 생성하지 **않는다**. `signal/{project-id}/blockers.md` 에만 사용자 액션 가이드 형태로 기록하고, retrospective 진입 전에 사용자에게 일괄 보고.
    - severity가 생략되었는데 `## 이슈/블로커`에 구체적 코드 문제가 있으면, Manager가 severity를 추정해 동일 규칙을 적용한다.
    - **원본 데이터 품질 이슈 분리** (DATA-QUALITY): 코드 결함이 아니라 입력 원본 파일(외부 소스·사용자 제공 md 등)의 포맷·escaping·누락으로 발생한 issue는 일반 FIX 태스크 대신 `TASK-DQ-*` prefix 태스크로 분리하고, `signal/{project-id}/data-quality-log.md` (append-only)에 적재한다. 원본 수정 금지 규정이 있는 프로젝트에서도 로그는 남아 배치 정정 시점에 일괄 처리한다. severity=observation으로 묻혀 사라지는 것을 방지한다.
 
