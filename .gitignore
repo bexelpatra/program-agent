@@ -8,9 +8,6 @@ projects/*/data/
 .env
 *.env
 
-# 레거시 아카이브 (git 브랜치로 대체됨)
-archive/
-
 # Python
 __pycache__/
 *.py[cod]
