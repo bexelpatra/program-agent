@@ -130,6 +130,17 @@ grep -oE '\([A-Za-z][^)]*\)' {script_or_output} | sort -u
 - 실패 시 충돌 패키지 버전을 pin 하고 재검증한다. 통과해야 해당 태스크 DoD 충족으로 본다.
 - 이 규칙은 "초기화 성격" 태스크(신규 requirements, 대규모 의존성 추가)에만 적용한다. 일반 구현 태스크에는 요구하지 않는다.
 
+### 프런트 폼 — JSON/코드 노출 금지 원칙
+
+UI 폼이 백엔드 pydantic schema (또는 JSON Schema) 의 **dict / array / 중첩 object** 타입 파라미터를 입력받을 때, 사용자에게 **JSON 문자열 입력을 노출하지 않는다.** 비개발자 사용자가 `{"SPY": 0.6, "AGG": 0.4}` 같은 raw JSON 을 직접 작성하는 UX 는 금지된다.
+
+- 이런 파라미터를 위한 **전용 위젯**을 작성한다. 예:
+  - `AssetWeightMap` — asset_id 별 슬라이더/숫자 입력 + 합 100% 자동 검증/정규화
+  - `MultiAssetSelector` — 자산 검색 + 다중 선택 + Badge 토글
+  - `KeyValueList` — 동적 row 추가/삭제로 dict 구성
+- 대규모 폼이면 [react-jsonschema-form](https://github.com/rjsf-team/react-jsonschema-form) + 커스텀 위젯 매핑을 검토한다.
+- MVP 시간 제약으로 임시 JSON-string 입력을 사용한다면, **반드시 후속 태스크로 전용 위젯 신규 작성을 등록**하고 현재 화면에 amber 경고 배너 ("JSON 직접 입력은 임시 UX 입니다") 를 표시한다.
+
 ### Repository / 공개 API 변경 시 보고
 - `repository.py` 등 데이터 계층의 **public 메서드**를 신규 추가/시그니처 변경한 경우, report의 "변경된 파일" 아래에 **추가/변경된 public 메서드 시그니처 목록**을 명시한다.
   - 예: `insert_run(session, run) -> int`, `list_recent_runs(session, limit=100) -> list[BacktestRun]`
