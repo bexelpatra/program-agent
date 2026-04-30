@@ -64,6 +64,30 @@ export const PaginatedAssetsSchema = z.object({
 });
 export type PaginatedAssets = z.infer<typeof PaginatedAssetsSchema>;
 
+// ─── OHLCV (TASK-204) ─────────────────────────────────────────────────
+//
+// Mirrors backend `OhlcvPoint` (backend/app/schemas/asset.py L63). `time`
+// arrives as an ISO datetime string (FastAPI serialises `datetime.datetime`).
+// `close` is required; OHLCV gaps may yield null open/high/low/adj_close/
+// volume for partial back-fills. We use this on /backtests/new to fetch
+// each universe asset's most recent close (≤ 14 day window) so we can
+// preflight "1주 가격 > 비중 × 초기 자본" warnings before the user submits
+// (TASK-204 — amber 경고 배너).
+
+export const OhlcvPointSchema = z.object({
+  time: z.string(),
+  open: z.number().nullable().optional(),
+  high: z.number().nullable().optional(),
+  low: z.number().nullable().optional(),
+  close: z.number(),
+  adj_close: z.number().nullable().optional(),
+  volume: z.number().nullable().optional(),
+});
+export type OhlcvPoint = z.infer<typeof OhlcvPointSchema>;
+
+export const OhlcvListSchema = z.array(OhlcvPointSchema);
+export type OhlcvList = z.infer<typeof OhlcvListSchema>;
+
 // ─── Strategy registry ─────────────────────────────────────────────────
 
 export const StrategyDescriptorSchema = z.object({

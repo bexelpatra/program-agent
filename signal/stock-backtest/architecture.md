@@ -606,9 +606,12 @@ universe = 백테스트 1회에 사용할 자산 묶음. 백테스트 생성 폼
 - 매수 주문이 cash_by_ccy 잔고 초과 시 **가능한 만큼만 체결**, 나머지는 비중 미달로 결과에 노출
 - 공매도/마진 미지원
 
-### 1주 단위 정수, 잔여 cash 누적
+### 1주 단위 정수, 잔여 cash 누적 (Q8, 2026-04-29 재결정 — 코인 한정 fractional)
 
-- 모든 자산 1주 단위 정수 매매
+- **주식/ETF/지수/채권/원자재 (KR/US market)**: 1주 단위 정수 매매
+- **암호화폐 (CRYPTO market)**: 소수점 8자리까지 fractional 매매 (BTC 1코인 = $50k 같은 고가 자산이 작은 자본으로도 매수 가능)
+- 분기 사유: BTC 1코인이 초기 자본보다 비싸면 정수 단위로는 0개 체결 → equity 평탄선. 사용자 첫 시도 사고 (run_id=56) 발견 후 결정. 일반 주식의 fractional shares 는 실거래에서 일부 증권사만 지원하므로 V3 는 코인만 허용.
+- 구현: `Portfolio.buy(asset_id, currency, ...)` 가 자산의 market 또는 currency 가 CRYPTO 인지 분기. 정수 자산은 `int()` 강제, 코인은 `Decimal` 8자리 (또는 Position.qty 자체를 Decimal 로 통일).
 - 비중 100% 정확히 못 채우는 잔액은 base_currency 잔고로 누적 (다음 리밸런싱에 활용)
 - 암호화폐도 1코인 단위 — BTC 1개당 가격이 크면 작은 universe 비중에서 매수 안 될 수 있음을 UI 에 안내
 
@@ -640,6 +643,14 @@ V3 CLAUDE.md L20 원안 유지:
 - 배당은 native currency 현금으로 수령 → `cash_by_ccy` 입금
 - 다음 리밸런싱에 자동 편입
 - yfinance dividends 사용. `corporate_actions` 테이블에 기록
+
+### 분할/증자/감자 처리 (V3 MVP 임시처방)
+
+- **yfinance**: `auto_adjust=True` 로 close 자체가 분할/배당 소급 보정된 가격.
+  OhlcvBar.close 만 사용하면 분할 시 가짜 시그널 발동 방지.
+- **pykrx**: 비조정가 한계 (한국 ETF 는 분할이 거의 없어 실전 영향 적음).
+- **정공법 (Phase 2)**: corporate_actions SPLIT 이벤트를 엔진이 매일 EOD 시점에
+  portfolio.position.qty 에 적용 + pykrx 별도 분할 데이터 수집. → BLOCKER-003.
 
 ---
 

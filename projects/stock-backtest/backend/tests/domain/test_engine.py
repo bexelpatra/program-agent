@@ -1,0 +1,340 @@
+"""engine.py 청산 동작 + invariant 회귀 테스트 (TASK-211).
+
+배경 (run_id=96):
+  BTC 100% + MA(117) + quarterly + 2017-01-01 ~ 2026-04-29 + USD $100k 백테스트에서
+  trades 가 1건만 발생. 원인 중 하나는 engine.py L219 의 `if target_weights:` 분기로,
+  필터 fail 시 빈 dict 가 반환되면 execute_rebalance 호출 자체를 skip → 이미 보유 중인
+  포지션이 청산되지 않는 버그.
+
+수정:
+  engine.py 의 `if target_weights:` 분기 제거. 빈 dict 도 execute_rebalance 호출 →
+  trade._classify_orders 가 보유 자산 전량 매도 sells 에 추가 → 청산 동작.
+
+회귀:
+  1. 빈 weights → 보유 BTC 전량 매도 (1건 SELL fill 발생).
+  2. universe 부분집합 invariant — 보유 자산이 universe 에 없으면 명시적 ValueError.
+"""
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from typing import ClassVar
+
+import pandas as pd
+import pytest
+from pydantic import BaseModel
+
+from app.domain.engine import BacktestRunContext, run_backtest
+from app.domain.portfolio import Portfolio
+from app.domain.strategy import Strategy
+from app.domain.trade import execute_rebalance
+
+
+ZERO = Decimal("0")
+ONE = Decimal("1")
+
+
+def _allow_all_trading_days(_market: str, _d: date) -> bool:
+    return True
+
+
+# ---------------------------------------------------------------------------
+# 회귀 1: filter fail → 빈 weights → 보유 청산
+# ---------------------------------------------------------------------------
+
+
+class _AlwaysOnAllocator:
+    """universe 의 첫 자산에 100%."""
+
+    name: ClassVar[str] = "always_on"
+
+    def required_universe(self) -> list[int]:
+        return []
+
+    def generate_weights(
+        self,
+        universe_asset_ids: list[int],
+        prices_until_d: pd.DataFrame,
+        signal_date: date,
+    ) -> dict[int, Decimal]:
+        if not universe_asset_ids:
+            return {}
+        return {universe_asset_ids[0]: Decimal("1.0")}
+
+
+class _EmptyParams(BaseModel):
+    pass
+
+
+class _ToggleFilter:
+    """test 가 신호 ON/OFF 를 클래스 변수로 토글 — strategy 인스턴스 공유 환경."""
+
+    name: ClassVar[str] = "toggle"
+    on: bool = True
+
+    def __init__(self, on: bool = True) -> None:
+        self.on = on
+
+    def is_eligible(
+        self,
+        asset_id: int,
+        prices_until_d: pd.DataFrame,
+        signal_date: date,
+    ) -> bool:
+        return self.on
+
+
+class TestFilterFailClearsHeldPosition:
+    """TASK-211 핵심 회귀: filter fail 시 보유 청산이 정상 동작하는지."""
+
+    def test_empty_weights_triggers_full_liquidation(self) -> None:
+        """직접 execute_rebalance 호출로 빈 target_weights 청산 동작 검증."""
+        p = Portfolio(base_currency="USD")
+        p.deposit("USD", Decimal("100000"))
+
+        # 1차: BTC 0.5 코인 매수.
+        first_d = date(2024, 3, 15)
+        execute_rebalance(
+            p,
+            target_weights={1: Decimal("1.0")},
+            asset_meta={1: ("CRYPTO", "USD")},
+            prices={1: Decimal("50000")},
+            fx_rates_to_base={"USD": ONE},
+            rebalance_date=first_d,
+            is_trading_day_fn=_allow_all_trading_days,
+        )
+        assert 1 in p.positions
+        held_qty = p.positions[1].qty
+        assert held_qty > ZERO
+
+        # 2차: filter fail 시뮬 — 빈 target_weights. 청산 동작 검증.
+        sell_d = date(2024, 4, 15)
+        fills = execute_rebalance(
+            p,
+            target_weights={},
+            asset_meta={1: ("CRYPTO", "USD")},
+            prices={1: Decimal("55000")},
+            fx_rates_to_base={"USD": ONE},
+            rebalance_date=sell_d,
+            is_trading_day_fn=_allow_all_trading_days,
+        )
+
+        # 회귀 핵심: 빈 weights 라도 보유 청산이 발생해야 한다.
+        sell_fills = [f for f in fills if f.side == "SELL"]
+        assert (
+            len(sell_fills) == 1
+        ), f"REGRESSION (TASK-211) — 빈 target_weights 청산 누락. fills={fills}"
+        assert sell_fills[0].asset_id == 1
+        assert sell_fills[0].qty_filled == held_qty
+        assert sell_fills[0].settlement_date == sell_d
+        # 보유 0 확인.
+        assert 1 not in p.positions
+
+    def test_engine_loop_clears_position_when_filter_fails_after_entry(
+        self,
+    ) -> None:
+        """engine.run_backtest 통합 — filter on→off 전이 시 보유가 자동 청산."""
+        # 5 거래일 시계열 (2024-03-15~2024-03-21 중 미국 거래일).
+        timeline = [
+            date(2024, 3, 15),
+            date(2024, 3, 18),
+            date(2024, 3, 19),
+            date(2024, 3, 20),
+            date(2024, 3, 21),
+        ]
+        prices = pd.DataFrame({1: [500.0, 501.0, 502.0, 503.0, 504.0]}, index=timeline)
+        prices.index.name = "date"
+
+        toggle = _ToggleFilter(on=True)
+        strategy = Strategy(
+            name="toggle_test",
+            allocator=_AlwaysOnAllocator(),
+            signal_filters=(toggle,),
+            rebalance_schedule="daily",
+        )
+
+        # 1단계: filter ON 으로 매수까지 진행 (3/15~3/18).
+        ctx_buy = BacktestRunContext(
+            base_currency="USD",
+            period_start=date(2024, 3, 15),
+            period_end=date(2024, 3, 18),
+            initial_cash={"USD": Decimal("100000")},
+            universe_market_meta={1: ("US", "USD")},
+            prices_aligned=prices,
+            fx_rates_to_base={d: {"USD": ONE} for d in timeline},
+            strategy=strategy,
+        )
+        result_buy = run_backtest(ctx_buy)
+        # 매수 1건 이상 발생 (rebalance daily, 매일 비중 차이 없으면 1회만).
+        buy_fills = [f for f in result_buy.fills if f.side == "BUY"]
+        assert len(buy_fills) >= 1
+        assert 1 in result_buy.final_portfolio.positions
+
+        # 2단계: filter OFF 로 토글 후 같은 portfolio 로 다음 구간 실행.
+        # ctx 새로 만들되 portfolio 를 inject 하기 위해 직접 매수 후 toggle 변경.
+        toggle.on = False
+        # portfolio 를 buy 단계 결과로 시드하기 위해 deposit 대신 직접 사용.
+        # engine 은 매 호출마다 새 portfolio 를 만드므로, 같은 시드 + ON→OFF 시퀀스
+        # 검증을 위해 새로 시작 후 첫날만 ON, 둘째 날부터 OFF 로 만든다.
+
+        # 시퀀스 시뮬: 첫날 ON (매수) → 둘째 날 OFF (청산).
+        class _SequenceFilter:
+            name: ClassVar[str] = "sequence"
+
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def is_eligible(
+                self,
+                asset_id: int,
+                prices_until_d: pd.DataFrame,
+                signal_date: date,
+            ) -> bool:
+                self.calls += 1
+                # signal_date 기반으로 결정적 — 첫날만 PASS, 이후 FAIL.
+                return signal_date == date(2024, 3, 15)
+
+        seq_filter = _SequenceFilter()
+        seq_strategy = Strategy(
+            name="sequence_test",
+            allocator=_AlwaysOnAllocator(),
+            signal_filters=(seq_filter,),
+            rebalance_schedule="daily",
+        )
+        ctx_seq = BacktestRunContext(
+            base_currency="USD",
+            period_start=date(2024, 3, 15),
+            period_end=date(2024, 3, 21),
+            initial_cash={"USD": Decimal("100000")},
+            universe_market_meta={1: ("US", "USD")},
+            prices_aligned=prices,
+            fx_rates_to_base={d: {"USD": ONE} for d in timeline},
+            strategy=seq_strategy,
+        )
+        result_seq = run_backtest(ctx_seq)
+
+        # 첫날 ON → 매수 1건, 둘째 날부터 OFF → 청산 1건.
+        buy_fills = [f for f in result_seq.fills if f.side == "BUY"]
+        sell_fills = [f for f in result_seq.fills if f.side == "SELL"]
+        assert len(buy_fills) == 1, f"매수 1건 기대. fills={result_seq.fills}"
+        assert len(sell_fills) == 1, (
+            f"REGRESSION (TASK-211) — filter OFF 전환 후 청산 누락. "
+            f"fills={result_seq.fills}"
+        )
+        # 청산 후 보유 0.
+        assert 1 not in result_seq.final_portfolio.positions
+
+
+# ---------------------------------------------------------------------------
+# 회귀 2: universe 부분집합 invariant
+# ---------------------------------------------------------------------------
+
+
+class TestHeldSubsetOfUniverseInvariant:
+    """보유 자산 ⊆ universe — 위반 시 명시적 에러 (silent 0 금지)."""
+
+    def test_classify_orders_raises_on_held_not_in_asset_meta(self) -> None:
+        """보유 중인 자산이 asset_meta 에 없으면 KeyError 가 _classify_orders 에서 raise."""
+        from app.domain.trade import _classify_orders
+
+        p = Portfolio(base_currency="USD")
+        p.deposit("USD", Decimal("100000"))
+        # asset_id=1 매수 (universe 에 들어있을 때).
+        execute_rebalance(
+            p,
+            target_weights={1: Decimal("1.0")},
+            asset_meta={1: ("US", "USD")},
+            prices={1: Decimal("500")},
+            fx_rates_to_base={"USD": ONE},
+            rebalance_date=date(2024, 3, 15),
+            is_trading_day_fn=_allow_all_trading_days,
+        )
+        assert 1 in p.positions
+
+        # 보유 중인데 asset_meta 에서 빠짐 (invariant 위반 시뮬).
+        with pytest.raises(KeyError, match="held asset_id=1"):
+            _classify_orders(
+                target_qty={},
+                portfolio=p,
+                target_weight_keys=set(),
+                asset_meta={},  # 보유 자산 1 누락
+            )
+
+    def test_execute_rebalance_raises_missing_price_when_held_not_in_meta(
+        self,
+    ) -> None:
+        """보유 자산이 asset_meta 에 없으면 execute_rebalance 가 명시적 에러로 catch."""
+        from app.domain.trade import MissingPriceError
+
+        p = Portfolio(base_currency="USD")
+        p.deposit("USD", Decimal("100000"))
+        execute_rebalance(
+            p,
+            target_weights={1: Decimal("1.0")},
+            asset_meta={1: ("US", "USD")},
+            prices={1: Decimal("500")},
+            fx_rates_to_base={"USD": ONE},
+            rebalance_date=date(2024, 3, 15),
+            is_trading_day_fn=_allow_all_trading_days,
+        )
+
+        # 빈 target_weights + asset_meta 에서 보유 자산 누락 시 명시적 에러.
+        # _classify_orders 가 KeyError 를 raise → execute_rebalance 호출 경로에서
+        # 그대로 전파 (silent 진행 금지).
+        # 단 target_weights 가 비어있으므로 assert 단계는 통과 → equity_in_base 가
+        # prices 에 asset 1 이 있어 통과 → _classify_orders 에서 KeyError.
+        with pytest.raises((KeyError, MissingPriceError)):
+            execute_rebalance(
+                p,
+                target_weights={},
+                asset_meta={},  # 보유 자산 누락
+                prices={1: Decimal("510")},
+                fx_rates_to_base={"USD": ONE},
+                rebalance_date=date(2024, 3, 18),
+                is_trading_day_fn=_allow_all_trading_days,
+            )
+
+    def test_engine_invariant_check_runs_normally_when_held_subset_of_universe(
+        self,
+    ) -> None:
+        """정상 경로: 보유 ⊆ universe — invariant 검증 통과 + 청산 정상 동작."""
+        # 3 거래일 필요 (D=15 매수 시그널 → D+1=18 매수 체결 → D=18 OFF 시그널 → D+1=19 청산).
+        timeline = [
+            date(2024, 3, 15),
+            date(2024, 3, 18),
+            date(2024, 3, 19),
+        ]
+        prices = pd.DataFrame({1: [500.0, 510.0, 515.0]}, index=timeline)
+        prices.index.name = "date"
+
+        class _OnceOnFilter:
+            name: ClassVar[str] = "once_on"
+
+            def is_eligible(
+                self,
+                asset_id: int,
+                prices_until_d: pd.DataFrame,
+                signal_date: date,
+            ) -> bool:
+                return signal_date == date(2024, 3, 15)
+
+        strategy = Strategy(
+            name="once_on",
+            allocator=_AlwaysOnAllocator(),
+            signal_filters=(_OnceOnFilter(),),
+            rebalance_schedule="daily",
+        )
+        ctx = BacktestRunContext(
+            base_currency="USD",
+            period_start=date(2024, 3, 15),
+            period_end=date(2024, 3, 19),
+            initial_cash={"USD": Decimal("100000")},
+            universe_market_meta={1: ("US", "USD")},
+            prices_aligned=prices,
+            fx_rates_to_base={d: {"USD": ONE} for d in timeline},
+            strategy=strategy,
+        )
+        # invariant 검증 통과 (보유 ⊆ universe). 청산 정상.
+        result = run_backtest(ctx)
+        assert not result.aborted
+        assert 1 not in result.final_portfolio.positions

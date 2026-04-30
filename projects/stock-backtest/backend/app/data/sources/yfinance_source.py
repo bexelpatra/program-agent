@@ -74,13 +74,21 @@ class YfinanceSource:
     crypto ticker 형식: 'BTC-USD', 'ETH-USD' (yfinance 표준).
     timezone 은 yfinance 반환값 그대로 사용 (이미 timezone-aware).
     UTC 정규화는 호출자(저장 레이어) 책임.
+
+    수정주가 (TASK-214 MVP 임시처방):
+    - `auto_adjust=True` 로 close 자체가 split/dividend 소급 보정된 가격을 반환.
+    - OhlcvBar.close 만 사용하면 분할 시 가짜 시그널 발동 방지 (엔진은 close 만 사용).
+    - auto_adjust=True 일 때 yfinance 는 'Adj Close' 컬럼을 'Close' 와 동일 값으로
+      채우거나 누락시킴. 호환성을 위해 OhlcvBar.adj_close 는 그대로 매핑.
+    - 정공법(corporate_actions SPLIT 이벤트를 매일 EOD 시점에 portfolio.position.qty
+      에 적용 + pykrx 별도 분할 데이터 수집) 은 BLOCKER-003 → Phase 2 백로그.
     """
 
     def fetch_ohlcv(self, symbol: str, start: date, end: date) -> list[OhlcvBar]:
         _rate_limit()
         ticker = yf.Ticker(symbol)
         hist = ticker.history(
-            start=start.isoformat(), end=end.isoformat(), auto_adjust=False
+            start=start.isoformat(), end=end.isoformat(), auto_adjust=True
         )
         bars: list[OhlcvBar] = []
         for ts, row in hist.iterrows():
@@ -90,6 +98,14 @@ class YfinanceSource:
                     "rejected close=0/null/NaN bar symbol=%s time=%s", symbol, ts
                 )
                 continue
+            # auto_adjust=True 일 때 yfinance 가 'Adj Close' 컬럼을 누락할 수
+            # 있어 close 값으로 fallback (둘은 정의상 동일).
+            adj_close_raw = row.get("Adj Close")
+            adj_close = (
+                _safe_float(adj_close_raw)
+                if adj_close_raw is not None
+                else float(close)
+            )
             bars.append(
                 OhlcvBar(
                     time=ts.to_pydatetime(),
@@ -97,7 +113,7 @@ class YfinanceSource:
                     high=_safe_float(row.get("High")),
                     low=_safe_float(row.get("Low")),
                     close=float(close),
-                    adj_close=_safe_float(row.get("Adj Close")),
+                    adj_close=adj_close,
                     volume=_safe_float(row.get("Volume")),
                 )
             )
@@ -153,6 +169,25 @@ class YfinanceSource:
                 latest=None,
                 note=f"검증 실패: {exc}",
             )
+
+    def earliest_available(self, symbol: str) -> date | None:
+        """yfinance period='max' 의 첫 인덱스 날짜.
+
+        TASK-213: 백필 시작일을 소스가 알려주는 가장 오래된 데이터 날짜로 사용.
+        네트워크/내부 예외는 None 으로 흡수 + warning 로깅 → 호출자 fallback 활성.
+        """
+        _rate_limit()
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="max", auto_adjust=False)
+            if hist.empty:
+                return None
+            return hist.index.min().date()
+        except Exception as exc:  # noqa: BLE001 - 외부 어댑터 경계
+            logger.warning(
+                "earliest_available failed for symbol=%s: %s", symbol, exc
+            )
+            return None
 
 
 def _fx_symbol(base_ccy: str, quote_ccy: str) -> str:

@@ -1,118 +1,172 @@
 ---
-task_id: TASK-001~TASK-100 (재검증, 36개)
+task_id: TASK-211, TASK-212, TASK-213, TASK-214, TASK-215, TASK-216
 verdict: PASS
 ---
 
-# Reviewer Report: V3 Phase 1 task-board 재검증
+# Reviewer Report: 엔진 결함 수정 6 태스크 재검증 (TASK-211~216)
+
+(2026-04-30 BTC 분기 리밸런싱 시나리오 결함 수정 — 직전 NEEDS_REVISION 6 항목 후속 검증.)
 
 ## 검증 대상
 - 파일:
-  - `/home/jai/pa/stock-backtest/signal/stock-backtest/task-board.md` (36 행, `grep -cE '^\| TASK-' = 36`)
-  - `/home/jai/pa/stock-backtest/signal/stock-backtest/architecture.md` (796 lines, V3 백엔드 모듈 분할 섹션 L646~L666 신설)
-- Manager 주장 요약: 직전 7건 + 사소 1건 모두 반영. architecture.md 에 "V3 백엔드 모듈 분할 (engine 분리 정책)" 섹션 추가 + task-board.md 의 11개 태스크 description 수정.
+  - `/home/jai/pa/stock-backtest/signal/stock-backtest/task-board.md` L99-121 (엔진 결함 수정 섹션 + 실행 순서 권고)
+  - 코드 인용 재검증:
+    - `backend/app/domain/engine.py` L210-258 (target_weights 분기 + execute_rebalance 호출)
+    - `backend/app/domain/trade.py` L79-92 (TradeFill), L171-194 (_classify_orders), L197-230 (_execute_sells), L233-293 (_execute_buys), L296-374 (execute_rebalance + L361/L366 sell/buy_fills 호출)
+    - `backend/app/services/backtest_runner.py` L226-251
+    - `backend/app/data/pipeline.py`, `backend/app/data/sources/{base,yfinance_source,pykrx_source}.py`
+    - `backend/tests/golden/snapshots/` (9 파일)
+  - `signal/stock-backtest/blockers.md` (BLOCKER-001/002 존재, 003 추가 예정)
+- Manager 주장 요약: 직전 NEEDS_REVISION 6 항목 모두 task-board.md 에 반영 완료.
 
-## 직전 7건 처리 결과
+## 직전 6 수정 요청 반영 검증
 
-| 항목 | 차단 강도 | 처리 결과 | 근거 |
-|------|----------|----------|------|
-| N1 | HARD | RESOLVED | task-board.md L19: `**market_events 는 Phase 2 로 이월 (architecture.md L732)** — Phase 1 에서는 생성하지 않음.` 명시. architecture.md `grep -n market_events` 결과 → L755 (Phase 2 정의) 와 일관. Phase 1 마이그레이션 대상에서 market_events 제거 확인. |
-| N2 | SOFT | RESOLVED | task-board.md L29 (TASK-022): `비거래일 다층 방어 4단계 중 **수집/캘린더 레이어** ... 조회 레이어는 TASK-030, 엔진 레이어는 TASK-041/043 에서.` 명시. 추가로 TASK-030 L36, TASK-041 L45, TASK-043 L47 모두 해당 레이어 책임 명시 확인 → 4단계 모두 책임 태스크 식별 가능. |
-| N3 | HARD | RESOLVED | architecture.md L646~L666 "V3 백엔드 모듈 분할 (engine 분리 정책)" 섹션 신설 (8개 파일 + 2개 서브디렉토리 매핑표). CLAUDE.md L39 "단일 파일 유지" 표현을 "메인 루프 분산 금지" 로 재해석한다는 명시 (V3 우선 원칙 L486 인용). task-board.md TASK-040~045 description 모두 `**파일: backend/app/domain/{xxx}.py**` 굵은 글씨로 파일 경로 명시. 파일 경로 1:1 매핑 검증 결과 모두 일치. |
-| N4 | SOFT | RESOLVED | TASK-060 L65 끝부분: `**backend/app/schemas/ 공통 base 스키마**: ErrorResponse, PaginatedResponse, TimestampedModel 등 cross-endpoint base.` TASK-061 L66: `**스키마 모듈**: backend/app/schemas/asset.py (...), backend/app/schemas/strategy.py (...)`. TASK-062 L67: `**스키마 모듈**: backend/app/schemas/backtest.py (...)`. 3개 태스크 모두 schemas 모듈 책임 명시. |
-| N5 | SOFT | RESOLVED | TASK-031 L37: `**레이어 분리**: ① domain 서비스 (backend/app/domain/asset/registration.py) 가 비즈니스 로직 담당, data 어댑터 (TASK-020/021) 를 의존성 주입으로 호출 (직접 import 금지) ② 즉시 검증 ③ 백필 큐잉은 scheduler 모듈 (backend/app/scheduler/backfill_queue.py) 에 위임 ④ 부분 백필.` 3 레이어 (domain/data/scheduler) 책임이 명시적으로 분리됨 + 의존 방향 (도메인→데이터 DI) 강제 표현 포함. |
-| N6 | SOFT | RESOLVED | TASK-001 L11: `**완료 검증**: pip install -r backend/requirements.txt 성공 + python -c 'import app' (backend/app 패키지) 성공 + cd frontend && npm install 성공 + npm run build 성공. 4개 모두 통과해야 DONE.` 4개 검증 명령 모두 명시. |
-| N7 | SOFT | RESOLVED | TASK-094 L85: `**화면 귀속**: TASK-092 (백테스트 생성) 화면 내에서 폼 제출 후 진행률 표시 (in-place 패널), 완료 시 TASK-093 결과 화면으로 라우팅. **별도 진행 화면 만들지 않음 (UI/UX 원칙 6 점진적 노출 — 화면 3개 한도 유지)**.` MVP 화면 3개 원칙 명시적 확인. |
-| N8 | 사소 | NOTED | task-board.md 본문에는 숫자 명시 없음 (`grep -c "35개\|36개" task-board.md = 0`). 정정 대상 없음. (보고용 숫자라 본문 갱신 불필요.) |
+### 1. TASK-211 — invariant 명시 + KeyError silent 0 금지 정책
 
-## 새로 발견된 이슈
+**요구**: 빈 dict entry path 에서 prices/asset_meta 가 보유 자산 cover 한다는 invariant + KeyError 명시 처리.
 
-없음. 추가 점검 항목:
+**반영 확인** (task-board.md L108):
+- ③ "**invariant 명시**: 빈 target_weights entry path 에서 `prices` (=settlement_prices) 와 `asset_meta` 가 **현재 보유 자산까지 cover** 한다는 가정을 단위 테스트로 박제. 보유 자산이 universe 부분집합이라는 불변 조건." — 명시.
+- ④ "**에러 정책**: 보유 자산이 prices/asset_meta 에 없으면 silent 0 금지 정책에 따라 `MissingPriceError` 명시적 예외 (현 trade.py L210-215 fallback 은 매도용 sell-only 청산이라 OK, 단 asset_meta 부재 시 KeyError 명시 catch)." — 명시.
+- 테스트: "boundary '보유 자산이 universe 의 부분집합' invariant 검증" 추가됨.
 
-### task-board.md 행 수 유지
-- `grep -cE '^\| TASK-' task-board.md` → **36** (직전 검증과 동일, 누락/중복 없음)
-- 중복 ID: 0 (`uniq -c` 검증)
-- TASK-001~003, 010~012, 020~023, 030~032, 040~045, 050~054, 060~062, 080~082, 090~094, 100 = 36개 모두 존재 확인
+**판정: 반영 OK**
 
-### architecture.md 모듈 분할표 vs task-board 파일 경로 1:1 매핑
+### 2. TASK-212 — `_execute_sells/_execute_buys` 시그니처 변경 4단계 풀어쓰기
 
-| architecture L654-663 파일 | architecture 담당 태스크 | task-board 파일 경로 | 일치 |
-|---------------------------|-------------------------|---------------------|------|
-| `engine.py` | TASK-043 | TASK-043 L47: `strategy.py + engine.py` | OK |
-| `portfolio.py` | TASK-040 | TASK-040 L44: `portfolio.py` | OK |
-| `trade.py` | TASK-041 | TASK-041 L45: `trade.py` | OK |
-| `calendar.py` | TASK-042 | TASK-042 L46: `calendar.py` | OK |
-| `strategy.py` | TASK-043 | TASK-043 L47: `strategy.py + engine.py` | OK |
-| `allocators/{fixed,all,equal}.py` | TASK-050,051,052 | TASK-050~052 L55-57 (파일 경로 명시 없으나 architecture 분할표로 식별 가능) | OK (소프트) |
-| `filters/{moving,momentum}.py` | TASK-053,054 | TASK-053~054 L58-59 (동일) | OK (소프트) |
-| `metrics.py` | TASK-044 | TASK-044 L48: `dividend.py + metrics.py` | OK |
-| `dividend.py` | TASK-044 | TASK-044 L48: `dividend.py + metrics.py` | OK |
-| `tax.py` | TASK-045 | TASK-045 L49: `tax.py` | OK |
+**요구**: ② sells/buys 시그니처에 rebalance_date 인자 추가, ③ execute_rebalance 호출 시 rebalance_date 전달, ④ TradeFill 에 settlement_date=rebalance_date 채움, ⑤ backtest_runner.py:242 datetime.combine 으로 교체.
 
-→ TASK-040~045 (엔진 코어 6개) 는 모두 서로 다른 파일을 수정하므로 의존성 순서만 지키면 동일 파일 충돌 없음. TASK-050~054 도 allocators/filters 서브디렉토리로 분리되어 충돌 없음. **병렬 안전성 확인**.
+**반영 확인** (task-board.md L109):
+- ① TradeFill 에 settlement_date 추가 — 명시.
+- ② `_execute_sells` (L197) / `_execute_buys` (L233) 시그니처에 `rebalance_date: date` 인자 추가 — 명시 (실측 라인 L197/L233 정확).
+- ③ `execute_rebalance` (L361 sell_fills 호출, L366 buy_fills 호출) 가 `rebalance_date=rebalance_date` 전달 — 명시 (실측: L361 `sell_fills = _execute_sells(`, L366 `buy_fills = _execute_buys(` 정확).
+- ④ TradeFill 생성 시 settlement_date=rebalance_date 채움 (L228, L290 두 위치) — 명시 (실측: L227-229 SELL TradeFill, L290-292 BUY TradeFill, ±2 라인 허용 내).
+- ⑤ backtest_runner.py:242 를 `datetime.combine(fill.settlement_date, datetime.min.time(), tzinfo=timezone.utc)` 로 교체 — 명시 (실측 L242 `"time": getattr(fill, "time", now),` 정확).
 
-## 의존성 그래프 무결성 재확인
+**판정: 반영 OK** (5 단계 모두 정확한 라인·시그니처로 풀어쓰기 완료)
 
-Python 자동 점검 결과:
-- 총 태스크: 36
-- 중복 ID: 0
-- 누락 의존: 0 (모든 Depends On 이 board 에 존재)
-- 위상 단계: 14 (순환 없음)
+### 3. TASK-213 — 운영 액션 분리
 
-위상 단계 (직전 검증과 동일):
-```
-L0  001
-L1  002, 060
-L2  010
-L3  003, 011, 012, 030
-L4  020, 032, 040
-L5  021, 041, 042
-L6  022, 043, 044
-L7  023, 031, 045, 050, 053
-L8  051, 052, 054, 061
-L9  062, 090
-L10 080, 082, 091
-L11 081, 092
-L12 093, 094
-L13 100
-```
+**요구**: 옵션 A (별도 신규 태스크 TASK-216 분리) 또는 옵션 B (본문 명확화).
 
-→ 그래프 무결성 유지. N3 처리 (engine.py 모듈 분할) 가 의존성 그래프를 변화시키지 않음 (Depends On 관계 변경 없음, 파일 경로만 명시 추가).
+**반영 확인** (task-board.md L110, L113):
+- TASK-213 description 끝: "**이 태스크는 코드 변경만 담당** — BTC ohlcv 재백필 운영 액션은 TASK-216 (Execution=user) 분리." — 명시.
+- TASK-216 신규 등록: "BTC asset_id=56 ohlcv 전체 삭제 + 재백필 수동 트리거", Execution=`user`, Assignee=`manager`, Depends On=TASK-213.
 
-## 클린 아키텍처 부합 재확인
+**판정: 반영 OK** (옵션 A 채택, 깔끔한 분리)
 
-| 디렉토리 | 담당 태스크 | 평가 |
-|----------|-----------|------|
-| backend/app/api | TASK-060, 061, 062 | OK |
-| backend/app/core | TASK-001 (스캐폴드) | OK |
-| backend/app/domain/portfolio.py | TASK-040 | OK (명시) |
-| backend/app/domain/trade.py | TASK-041 | OK (명시) |
-| backend/app/domain/calendar.py | TASK-042 | OK (명시) |
-| backend/app/domain/strategy.py + engine.py | TASK-043 | OK (명시) |
-| backend/app/domain/dividend.py + metrics.py | TASK-044 | OK (명시) |
-| backend/app/domain/tax.py | TASK-045 | OK (명시) |
-| backend/app/domain/allocators/ | TASK-050, 051, 052 | OK (architecture 매핑) |
-| backend/app/domain/filters/ | TASK-053, 054 | OK (architecture 매핑) |
-| backend/app/domain/asset/registration.py | TASK-031 | OK (명시) |
-| backend/app/data | TASK-020, 021, 022 | OK |
-| backend/app/scheduler/backfill_queue.py | TASK-023, TASK-031 위임 | OK (명시) |
-| backend/app/models | TASK-010, 011, 012 | OK |
-| backend/app/schemas | TASK-060 (base), 061 (asset/strategy), 062 (backtest) | OK (명시) |
-| frontend/* | TASK-090~094 | OK |
-| docker-compose.yml | TASK-001 | OK |
+### 4. TASK-214 — `auto_adjust=True` 한 가지로 결정 명시
 
-→ 직전 검증의 약점 (N3, N4, N5) 모두 해결.
+**요구**: Manager 가 결정해서 한 가지로 명시. 권장 = `auto_adjust=True`.
+
+**반영 확인** (task-board.md L111):
+- 제목: "분할/증자/감자 처리 — 임시처방 (A 방향: yfinance auto_adjust=True 전환 + pykrx 한계 명시)" — 결정 명시.
+- "**결정 명시**: `auto_adjust=True` 채택 (close 자체가 분할/배당 소급 보정. OhlcvBar.close 만 사용하면 끝, 호출부 변경 최소). `OhlcvBar.adj_close` 는 호환성 위해 유지 (auto_adjust=True 시 Adj Close 동일 값)." — 결정 근거 명시.
+- ① yfinance_source.py:83 `auto_adjust=False` → `auto_adjust=True` — 단일 변경 명시.
+- ③ architecture.md "거래 정책" 섹션 갱신 sub-action 명시.
+
+**판정: 반영 OK** (한 가지로 결정 + 결정 근거까지 박제)
+
+### 5. 실행 순서 권고 + golden baseline 통합 재생성 책임자 (TASK-215) 신설
+
+**요구**: TASK-211/212/214 모두 DONE 후 TASK-215 신설 (단일 책임자) + 실행 순서 명시.
+
+**반영 확인** (task-board.md L112, L115-121):
+- TASK-215 신규 등록: "골든 baseline 9 케이스 통합 재생성", Assignee=`tester`, Depends On=`TASK-211, TASK-212, TASK-214`, 9 파일 명시 (`scenario_{1,2,3}__{fixed,all,equal}_weight.json`).
+- 실측: `backend/tests/golden/snapshots/` 디렉토리에 9 파일 모두 존재 (scenario_1_kr_only / scenario_2_kr_us / scenario_3_us_crypto × all_weather/equal_weight/fixed_weight). 단, **파일명이 description (`scenario_{1,2,3}__{fixed,all,equal}_weight.json`) 과 일치하지 않음** (실제: `scenario_1_kr_only__fixed_weight.json` 형태). Coder/Tester 가 파일을 실제 디렉토리에서 보고 작업할 가능성이 높아 큰 위험은 아님 — 관찰만 기록 (NEEDS_REVISION 사유는 아님).
+- "## 실행 순서 권고" 섹션 (L115-121) 추가:
+  1. 순차 1: TASK-212 → TASK-211 (TradeFill 모델 변경 먼저)
+  2. 순차 2: TASK-213 → TASK-214 (yfinance/pykrx 동일 파일 충돌 회피)
+  3. 병렬: 순차 1 ↔ 순차 2
+  4. 마지막: TASK-215 (단일 책임자)
+  5. 사용자 액션: TASK-216 (TASK-213 DONE 후)
+
+**판정: 반영 OK** (실행 순서·책임자 모두 명시. 파일명 사소 불일치는 observation)
+
+### 6. golden baseline 갱신 시 git diff/commit message 가이드
+
+**요구**: 각 description 에 git diff 변경 양상 (청산 trade 추가 / time 필드 변경 / 가격 보정 변동) + 회귀 의도 commit message 명시.
+
+**반영 확인**:
+- TASK-211 (L108): "**회귀 의도 commit msg**: 'TASK-211: filter fail 시 보유 청산 추가 — 골든 trades 청산 패턴 추가됨'" — 명시.
+- TASK-212 (L109): "**회귀 의도 commit msg**: 'TASK-212: TradeFill.settlement_date 추가 — trades 시간 필드가 settlement_d 로 변경'" — 명시.
+- TASK-214 (L111): "**회귀 의도 commit msg**: 'TASK-214: yfinance auto_adjust=True — 가격이 split/dividend 소급 보정된 값으로 변경'" — 명시.
+- TASK-215 (L112): git diff 변경 양상 검증 명시 ((a) 청산 trade 신규 추가, (b) trade time 필드가 settlement_date 로 변경, (c) 가격 값이 분할 보정 값으로 변경) + commit message "TASK-215: golden baseline 재생성 — TASK-211(청산) + TASK-212(time) + TASK-214(가격보정) 누적 반영" 명시.
+
+**판정: 반영 OK** (4 태스크 모두 일관된 git diff/commit msg 가이드)
+
+## 추가 검증
+
+### TASK-215 Tester 할당 적절성
+
+- TASK-215 의 본질은 "9 케이스 fixture regenerate + git diff line-by-line 검증" — 코드 변경 없이 테스트 baseline 갱신 + 회귀 의도 검증.
+- 골든 스냅샷 변경 의도 검증은 Tester 의 본업 (회귀 catch). Coder 가 자기 코드 변경을 정당화하는 것보다 Tester 가 독립 검증이 적합.
+- **판정: Tester 할당 적절**
+
+### TASK-216 Execution=user 적절성
+
+- 본질: ① DB 직접 SQL DELETE ② backfill API/scheduler trigger ③ DB SELECT 검증 — 모두 운영 액션 (코드 변경 0).
+- DB 직접 조작은 Coder 자율 실행 시 환경 의존성·돌이킬 수 없는 위험 (asset_id=56 데이터 영구 삭제) 존재. 사용자 명시 동의 필요.
+- 자산 ID 56 이 실제 BTC 인지 사용자 환경 확인 필요 (다른 환경에서는 다른 ID 일 수 있음).
+- **판정: Execution=user 적절**
+
+### 실행 순서 권고와 의존성 일관성
+
+| 권고 순서 | task-board Depends On | 일관성 |
+|-----------|----------------------|--------|
+| 순차 1: TASK-212 → TASK-211 | TASK-211 Depends On = `TASK-212` | OK |
+| 순차 2: TASK-213 → TASK-214 | TASK-214 Depends On = `TASK-213` | OK |
+| 마지막: TASK-211/212/214 → TASK-215 | TASK-215 Depends On = `TASK-211, TASK-212, TASK-214` | OK |
+| 사용자 액션: TASK-213 → TASK-216 | TASK-216 Depends On = `TASK-213` | OK |
+| TASK-212 = 시작점 (선행 없음) | TASK-212 Depends On = `-` | OK |
+| TASK-213 = 시작점 (선행 없음) | TASK-213 Depends On = `-` | OK |
+
+**판정: 6/6 모두 일관 — 실행 순서 권고와 Depends On 컬럼 완벽 일치**
+
+## 목적성·클린 아키텍처 (재확인)
+
+- 6 태스크 모두 architecture.md V3 § "거래 정책" + Quant Lab CLAUDE.md "백테스팅 실거래 반영도 70%" + "비거래일 방어" 원칙 부합.
+- TASK-211/212 = bug (실거래 반영도 위반). TASK-213/214 = bug + 임시처방 박제. TASK-215 = baseline 회귀 검증. TASK-216 = 운영 액션.
+- 클린 아키텍처: domain ↔ data 의존 방향 위반 없음. test 디렉토리는 backend/tests/golden 으로 일관.
+
+## 추후 수정 용이성
+
+- TASK-212 의 `TradeFill.settlement_date` 필드 추가 → 후속 fill 사용처 (Tax/Reporting/UI) 가 그 필드 활용 가능.
+- TASK-213 의 `earliest_available` 추상 메서드 → DataSource Protocol 확장이라 향후 어댑터 (Upbit/한국은행) 일관 적용.
+- TASK-214 의 임시처방 → BLOCKER-003 으로 정공법 (Phase 2) 박제.
+- TASK-215 의 baseline 단일 책임자 → 향후 비슷한 누적 변경 시 동일 패턴 재사용 가능.
 
 ## 판정
-
 **PASS**
 
-근거: 직전 NEEDS_REVISION 7건 (HARD 2 + SOFT 5) + 사소 1건 모두 RESOLVED. architecture.md V3 모듈 분할표와 task-board.md 의 파일 경로가 1:1 일치하며 의존성 그래프 무결성 유지. 새로 발견된 이슈 없음. 병렬 안전성 확보 (TASK-040~045 가 서로 다른 파일 수정).
+판정 사유:
+- 직전 6 수정 요청 모두 task-board.md 에 정확히 반영 (5/6 완벽 일치, 1/6 = 골든 파일명 표기 사소 불일치는 observation 수준).
+- 라인 인용 정확도: TASK-212 의 5 단계 시그니처 변경 명세 (L197/L233/L228/L290/L361/L366/L242) 모두 실측 일치.
+- TASK-215/216 신규 추가가 적절한 책임 분리 (Tester baseline / user 운영 액션).
+- 실행 순서 권고 ↔ Depends On 컬럼 6/6 일관.
+- Manager 가 Coder/Tester 호출 가능 신호.
+
+## 권장 호출 순서 (Manager 행동 가이드)
+
+병렬 가능한 첫 라운드:
+1. **Coder TASK-212** (TradeFill 모델 변경) — 시작점, 선행 없음.
+2. **Coder TASK-213** (earliest_available 추상 메서드 + yfinance/pykrx 구현) — 시작점, 선행 없음.
+
+위 둘은 서로 다른 파일 (`domain/trade.py + services/backtest_runner.py` vs `data/sources/* + data/pipeline.py`) 이라 병렬 실행 안전. 각각 별도 report 파일 (`coder-report-TASK-212.md`, `coder-report-TASK-213.md`) 사용 권장.
+
+각각 DONE 후:
+3. **Coder TASK-211** (engine 청산) — TASK-212 의 TradeFill.settlement_date 가 도입돼 있어야 함.
+4. **Coder TASK-214** (yfinance auto_adjust=True + pykrx 코멘트) — TASK-213 의 earliest_available 메서드와 같은 파일이라 순차.
+
+3/4 도 서로 독립이라 병렬 가능 (engine vs sources).
+
+마지막:
+5. **Tester TASK-215** (골든 baseline 9 케이스 재생성) — TASK-211/212/214 모두 DONE 후.
+6. **사용자 통지 TASK-216** — TASK-213 DONE 후 Manager 가 사용자에게 manual 전달.
 
 ## Manager 에게 전달
 
-다음 단계:
-1. **TASK-001 부터 Coder 호출 시작 권고**. 위상 정렬 L0 = TASK-001 (선행 의존 없음).
-2. TASK-001 완료 후 **L1 병렬** 가능: TASK-002 (DB 초기화) + TASK-060 (FastAPI 스캐폴드) — 서로 다른 파일 영역 (alembic vs FastAPI/schemas) 이므로 안전.
-3. TASK-001 완료 시 description 의 4개 검증 명령 (pip install / python -c 'import app' / npm install / npm run build) 모두 성공해야 DONE 처리.
-4. TASK-040~045 진행 시 architecture.md L650-665 모듈 분할표를 Coder 에게 함께 전달해 파일 경로 혼동 방지.
-5. TASK-031 진행 시 의존성 주입 패턴 (data 어댑터 직접 import 금지) Reviewer 가 코드 단계에서 재검증 권고.
+- PASS 판정 — Coder 호출 진행 가능.
+- 첫 라운드: Coder TASK-212 + TASK-213 병렬 호출 권장 (위 권장 호출 순서 1·2).
+- 마일스톤 재검증 권장 시점: TASK-211 + TASK-212 + TASK-214 모두 DONE 직후 (TASK-215 진입 전) — 누적 변경의 일관성 독립 검증.
+- 작은 관찰 (NEEDS_REVISION 아님): TASK-215 description 의 골든 파일명 표기 (`scenario_{1,2,3}__{fixed,all,equal}_weight.json`) 가 실제 디렉토리의 파일명 패턴 (`scenario_1_kr_only__fixed_weight.json` 등) 과 다름. Tester 가 실제 디렉토리에서 파일을 직접 listing 해서 작업할 것이라 위험은 낮으나, 다음 회차에서 정확 파일명으로 갱신하면 더 명료.

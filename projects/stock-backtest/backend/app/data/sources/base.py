@@ -79,6 +79,16 @@ class DataSource(Protocol):
         """3초 이내 ticker 존재 + 최소 1년치 데이터 유무 검증."""
         ...
 
+    def earliest_available(self, symbol: str) -> date | None:
+        """소스가 알려주는 자산의 가장 오래된 일봉 날짜.
+
+        - 반환 None = "알 수 없음" (호출자가 fallback 사용).
+        - 백필 정책 (TASK-213): 신규 자산 최초 백필 시 이 날짜를 시작일로 사용해
+          소스가 실제 보유한 모든 과거 데이터를 한 번에 적재한다.
+        - 어댑터 구현체는 네트워크/외부 API 예외를 None 으로 흡수하고 warning 로깅 권장.
+        """
+        ...
+
 
 class FxSource(Protocol):
     """환율 전용 인터페이스.

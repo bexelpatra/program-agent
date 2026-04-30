@@ -21,15 +21,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Callable, Mapping
 
 from app.domain.asset.calendar_guard import is_trading_day
+from app.domain.asset.entity import FRACTIONAL_PRECISION, is_fractional_market
 from app.domain.portfolio import DEFAULT_SLIPPAGE_BPS, Portfolio
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
 BPS_DIVISOR = Decimal("10000")
+
+# fractional 자산 quantize 단위 (10^-8). portfolio 와 동일 정책.
+_FRACTIONAL_QUANTUM = Decimal(1).scaleb(-FRACTIONAL_PRECISION)
 
 # V3 CLAUDE.md L19 + architecture L632-636 디폴트.
 # defaults.yaml 또는 호출자 override 우선 적용.
@@ -66,20 +70,31 @@ class TradeOrder:
     market: str  # 수수료 매핑용 (KR/US/CRYPTO)
     currency: str
     side: str  # "BUY" | "SELL"
-    qty_target: int  # 정수 주 (V3 § L611). buy 는 partial fill 가능, sell 도 보유분만큼만
+    # qty_target: V3 Q8 재결정 (2026-04-29) — Decimal 통일.
+    # 정수 자산은 Decimal(int), CRYPTO 는 8자리 소수.
+    qty_target: Decimal
     price: Decimal  # 체결가 (어댑터 슬리피지 적용 전, native)
 
 
 @dataclass(frozen=True)
 class TradeFill:
-    """실제 체결 결과. trade_id 는 DB 가 부여 (도메인은 미보유)."""
+    """실제 체결 결과. trade_id 는 DB 가 부여 (도메인은 미보유).
+
+    qty_filled 는 Decimal — 정수 자산은 Decimal(int), CRYPTO 는 8자리 소수.
+    backtest_runner 가 Numeric(20, 8) 컬럼에 그대로 적재.
+
+    settlement_date 는 모델 A (D 종가 시그널 → D+1 시가 체결) 의 D+1 일자.
+    엔진이 execute_rebalance 호출 시 rebalance_date 인자로 주입한 값이 그대로 채워짐.
+    backtest_runner 가 backtest_trades.time 컬럼에 적재 (UTC midnight 으로 환산).
+    """
 
     asset_id: int
     side: str
-    qty_filled: int
+    qty_filled: Decimal
     price: Decimal  # 슬리피지 적용 후 effective price (native)
     commission: Decimal  # native
     currency: str
+    settlement_date: date
 
 
 # ===== 시장별 수수료 매핑 =====
@@ -159,41 +174,62 @@ def _native_value_from_base(
 
 
 def _classify_orders(
-    target_qty: Mapping[int, int],
+    target_qty: Mapping[int, Decimal],
     portfolio: Portfolio,
     target_weight_keys: set[int],
-) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    asset_meta: Mapping[int, tuple[str, str]],
+) -> tuple[list[tuple[int, Decimal]], list[tuple[int, Decimal]]]:
     """현재 보유 vs target_qty 비교 → (sells, buys) 분류.
 
     target_weights 에 없으나 보유 중인 자산은 전량 매도.
+    qty 는 Decimal — 정수/소수 자산 통일 (V3 Q8 재결정).
+
+    asset_meta 가드 (TASK-211): 보유 자산이 asset_meta 에 없으면 silent 진행 대신
+    명시적 KeyError → execute_rebalance 가 ValueError 로 wrap 하여 호출자(engine.py)
+    에 전파. universe 부분집합 invariant 위반 catch.
     """
-    sells: list[tuple[int, int]] = []
-    buys: list[tuple[int, int]] = []
+    sells: list[tuple[int, Decimal]] = []
+    buys: list[tuple[int, Decimal]] = []
     for asset_id, target in target_qty.items():
         current_pos = portfolio.positions.get(asset_id)
-        current = current_pos.qty if current_pos else 0
+        current = current_pos.qty if current_pos else ZERO
         diff = target - current
-        if diff < 0:
+        if diff < ZERO:
             sells.append((asset_id, -diff))
-        elif diff > 0:
+        elif diff > ZERO:
             buys.append((asset_id, diff))
     for asset_id, pos in list(portfolio.positions.items()):
-        if asset_id not in target_weight_keys and pos.qty > 0:
+        if asset_id not in target_weight_keys and pos.qty > ZERO:
+            if asset_id not in asset_meta:
+                # 보유 자산이 asset_meta 에 없음 — universe 부분집합 invariant 위반.
+                # silent skip 시 청산 누락 → silent 0 정책 위반. 명시적 에러 raise.
+                raise KeyError(
+                    f"held asset_id={asset_id} not in asset_meta — "
+                    f"invariant violation (held ⊄ universe)"
+                )
             sells.append((asset_id, pos.qty))
     return sells, buys
 
 
 def _execute_sells(
-    sells: list[tuple[int, int]],
+    sells: list[tuple[int, Decimal]],
     portfolio: Portfolio,
     asset_meta: Mapping[int, tuple[str, str]],
     prices: Mapping[int, Decimal],
     commission_override: Mapping[str, Decimal] | None,
     slippage_bps: Decimal,
+    rebalance_date: date,
 ) -> list[TradeFill]:
     """매도 시퀀스 실행. native cash 입금 후 BUY 단계가 활용 (Q5 B native 우선)."""
     fills: list[TradeFill] = []
     for asset_id, qty in sells:
+        # asset_meta 누락 가드 (TASK-211): silent KeyError 노출 대신 명시적
+        # MissingPriceError 로 변환 → 엔진 레이어 silent 0 정책 일관성.
+        if asset_id not in asset_meta:
+            raise MissingPriceError(
+                f"asset_id={asset_id} missing from asset_meta on sell at "
+                f"{rebalance_date} (held ⊄ universe invariant violation)"
+            )
         market, currency = asset_meta[asset_id]
         price = prices.get(asset_id)
         if price is None:
@@ -203,29 +239,39 @@ def _execute_sells(
                 continue
             price = pos.avg_price
         commission_bps = commission_bps_for(market, commission_override)
+        fractional = is_fractional_market(market)
         actual_qty, net_received = portfolio.sell(
-            asset_id, price, qty, commission_bps, slippage_bps
+            asset_id, price, qty, commission_bps, slippage_bps, fractional=fractional
         )
-        if actual_qty <= 0:
+        if actual_qty <= ZERO:
             continue
         # net_received = gross - commission, gross = effective_price * qty
         # commission = gross * (commission_bps / 10000)
         # → commission = net_received * commission_bps / (10000 - commission_bps)
         commission = net_received * commission_bps / (BPS_DIVISOR - commission_bps)
         fills.append(
-            TradeFill(asset_id, "SELL", actual_qty, price, commission, currency)
+            TradeFill(
+                asset_id,
+                "SELL",
+                actual_qty,
+                price,
+                commission,
+                currency,
+                rebalance_date,
+            )
         )
     return fills
 
 
 def _execute_buys(
-    buys: list[tuple[int, int]],
+    buys: list[tuple[int, Decimal]],
     portfolio: Portfolio,
     asset_meta: Mapping[int, tuple[str, str]],
     prices: Mapping[int, Decimal],
     fx_rates_to_base: Mapping[str, Decimal],
     commission_override: Mapping[str, Decimal] | None,
     slippage_bps: Decimal,
+    rebalance_date: date,
 ) -> list[TradeFill]:
     """매수 시퀀스 실행. native 우선 (Q5 B), 부족 시 base 경유 환전 (Q3 C)."""
     fills: list[TradeFill] = []
@@ -233,6 +279,7 @@ def _execute_buys(
         market, currency = asset_meta[asset_id]
         price = prices[asset_id]
         commission_bps = commission_bps_for(market, commission_override)
+        fractional = is_fractional_market(market)
 
         # 필요 native 추정 (정확치는 partial fill 후 결정).
         # 매수 cost = effective_price * qty * (1 + commission_bps/10000)
@@ -242,7 +289,7 @@ def _execute_buys(
             * (ONE + slippage_bps / BPS_DIVISOR)
             * (ONE + commission_bps / BPS_DIVISOR)
         )
-        required = cost_per_unit * Decimal(qty)
+        required = cost_per_unit * qty
 
         # ensure_native_funds: native 부족 시 base 에서 환전 (양방향 비용 발생).
         if currency != portfolio.base_currency:
@@ -260,16 +307,30 @@ def _execute_buys(
             )
 
         actual_qty, total_cost = portfolio.buy(
-            asset_id, currency, price, qty, commission_bps, slippage_bps
+            asset_id,
+            currency,
+            price,
+            qty,
+            commission_bps,
+            slippage_bps,
+            fractional=fractional,
         )
-        if actual_qty <= 0:
+        if actual_qty <= ZERO:
             continue
         # total_cost = gross + commission, gross = effective_price * qty
         # commission = gross * (commission_bps / 10000)
         # → commission = total_cost * commission_bps / (10000 + commission_bps)
         commission = total_cost * commission_bps / (BPS_DIVISOR + commission_bps)
         fills.append(
-            TradeFill(asset_id, "BUY", actual_qty, price, commission, currency)
+            TradeFill(
+                asset_id,
+                "BUY",
+                actual_qty,
+                price,
+                commission,
+                currency,
+                rebalance_date,
+            )
         )
     return fills
 
@@ -312,23 +373,43 @@ def execute_rebalance(
     # 2. 현재 equity (base_currency).
     equity = portfolio.equity_in_base(prices, fx_rates_to_base)
 
-    # 3. target qty (정수 주, V3 § Q8).
-    target_qty: dict[int, int] = {}
+    # 3. target qty — V3 Q8 재결정 (2026-04-29): 코인 한정 fractional.
+    #    KR/US (주식·ETF·지수·채권·원자재): 1주 단위 정수.
+    #    CRYPTO: 소수점 8자리 (BTC 1코인 = $50k 같은 고가 자산이 작은 자본으로
+    #    매수 불가능해 모든 백테스트가 평탄선이 되는 사고 방지).
+    target_qty: dict[int, Decimal] = {}
     for asset_id, weight in target_weights.items():
-        _, currency = asset_meta[asset_id]
+        market, currency = asset_meta[asset_id]
         price = prices[asset_id]
         target_value_base = equity * weight
         target_value_native = _native_value_from_base(
             target_value_base, currency, portfolio.base_currency, fx_rates_to_base
         )
-        target_qty[asset_id] = int(target_value_native / price)
+        if price <= ZERO:
+            target_qty[asset_id] = ZERO
+            continue
+        raw_qty = target_value_native / price
+        if is_fractional_market(market):
+            target_qty[asset_id] = raw_qty.quantize(
+                _FRACTIONAL_QUANTUM, rounding=ROUND_DOWN
+            )
+        else:
+            target_qty[asset_id] = Decimal(int(raw_qty))
 
     # 4. BUY/SELL 분류.
-    sells, buys = _classify_orders(target_qty, portfolio, set(target_weights.keys()))
+    sells, buys = _classify_orders(
+        target_qty, portfolio, set(target_weights.keys()), asset_meta
+    )
 
     # 5. SELL 먼저 (Q3 C 단계 분리 — native 입금 후 BUY 가 활용).
     sell_fills = _execute_sells(
-        sells, portfolio, asset_meta, prices, commission_override, slippage_bps
+        sells,
+        portfolio,
+        asset_meta,
+        prices,
+        commission_override,
+        slippage_bps,
+        rebalance_date,
     )
 
     # 6+7. BUY (native 우선 Q5 B, 부족 시 base 환전).
@@ -340,6 +421,7 @@ def execute_rebalance(
         fx_rates_to_base,
         commission_override,
         slippage_bps,
+        rebalance_date,
     )
 
     return sell_fills + buy_fills

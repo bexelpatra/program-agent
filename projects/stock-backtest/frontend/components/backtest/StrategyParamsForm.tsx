@@ -1,23 +1,30 @@
 "use client";
 
 /**
- * StrategyParamsForm — JSON Schema (pydantic export) → React form.
+ * StrategyParamsForm — backend pydantic params_schema 를 React 폼으로
+ * 자동 렌더.
  *
- * Each backend allocator/filter ships its `params_schema` (TASK-061
- * StrategyDescriptor.params_schema) as a JSON Schema object. We render
- * each top-level property as a labelled input based on its `type`:
- *
- *   - integer / number → numeric Input
- *   - string           → text Input (with optional enum → Select)
+ * 각 top-level property 의 `type` 에 따라:
+ *   - integer / number → 숫자 Input
+ *   - string           → 텍스트 Input (enum 이면 Select)
  *   - boolean          → checkbox
- *   - object / array   → temporary JSON-string Input (see caveat below)
+ *   - object / array   → **부모가 주입한 complexFieldRenderer** 또는
+ *                        "전용 위젯이 부모 화면에 표시됩니다" 안내.
+ *                        절대 raw JSON textarea 를 노출하지 않는다.
  *
- * UI/UX 원칙 1 (JSON 노출 금지) — 단순 scalar 필드는 모두 폼 입력으로
- * 노출. 단, allocator 가 dict 파라미터 (FixedWeight 의 weights:
- * {asset_id → weight}) 를 요구하면 전용 위젯이 생기기 전까지 임시로
- * JSON-string 입력을 허용한다. coder-report 의 "다음 제안" 에
- * AssetWeightMap 위젯 발주 항목을 남긴다.
+ * UI/UX 원칙 1 (JSON / 코드 노출 금지) 강제:
+ *   사용자 첫 사용 시 FixedWeight.weights (`dict[int, float]`) 를
+ *   임시로 JSON-string 입력으로 받았다가 ticker 키 입력 → 백엔드
+ *   422 ValidationError 사고가 발생했다. 그 임시 우회는 영구 제거됐다.
+ *   dict / array 파라미터는 반드시 전용 위젯(AssetWeightMap 등) 으로
+ *   렌더해야 한다.
+ *
+ * 부모(예: NewBacktestPage) 가 `complexFieldRenderer` 를 주면 해당
+ * 키에 대해 부모의 위젯을 그 자리에 끼워넣을 수 있다. 미주입 시에는
+ * "부모 화면 다른 카드에서 입력" 안내 텍스트만 보여준다.
  */
+import type { ReactNode } from "react";
+
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -28,8 +35,6 @@ interface JsonSchemaProperty {
   description?: string;
   default?: unknown;
   enum?: unknown[];
-  // pydantic v2 puts inner schemas under `items` for arrays;
-  // we don't dig deeper at MVP — array fields fall back to JSON input.
 }
 
 interface JsonSchemaObject {
@@ -38,17 +43,31 @@ interface JsonSchemaObject {
   required?: string[];
 }
 
+export interface ComplexFieldRendererArgs {
+  key: string;
+  schema: JsonSchemaProperty;
+  value: unknown;
+  onChange: (next: unknown) => void;
+  required: boolean;
+}
+
 interface Props {
   schema: JsonSchemaObject;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
+  /**
+   * 부모가 dict/array 같은 복합 필드를 직접 렌더하고 싶을 때 주입.
+   * `null` 을 반환하면 안내 메시지만 표시. 함수 자체가 없으면 안내만.
+   */
+  complexFieldRenderer?: (args: ComplexFieldRendererArgs) => ReactNode | null;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
-export function StrategyParamsForm({ schema, value, onChange }: Props) {
+export function StrategyParamsForm({
+  schema,
+  value,
+  onChange,
+  complexFieldRenderer,
+}: Props) {
   const properties = schema.properties ?? {};
   const required = new Set(schema.required ?? []);
 
@@ -152,11 +171,28 @@ export function StrategyParamsForm({ schema, value, onChange }: Props) {
         }
 
         if (def.type === "object" || def.type === "array") {
-          // 임시 JSON 입력 — 전용 위젯이 생길 때까지의 우회.
-          // UI/UX 원칙 1 위반이지만 placeholder 로 의도 노출 + report observation.
-          const display = isPlainObject(value[key]) || Array.isArray(value[key])
-            ? JSON.stringify(value[key])
-            : String(value[key] ?? "");
+          // UI/UX 원칙 1 — JSON textarea 영구 금지.
+          // 부모가 전용 위젯을 주입했으면 그 위젯을, 아니면 안내만.
+          const rendered = complexFieldRenderer?.({
+            key,
+            schema: def,
+            value: value[key],
+            onChange: (next) => update(key, next),
+            required: isRequired,
+          });
+          if (rendered !== undefined && rendered !== null) {
+            return (
+              <FieldLabel
+                key={key}
+                id={fieldId}
+                label={label}
+                description={def.description}
+                required={isRequired}
+              >
+                {rendered}
+              </FieldLabel>
+            );
+          }
           return (
             <FieldLabel
               key={key}
@@ -165,33 +201,8 @@ export function StrategyParamsForm({ schema, value, onChange }: Props) {
               description={def.description}
               required={isRequired}
             >
-              <Input
-                id={fieldId}
-                type="text"
-                placeholder={
-                  def.type === "object"
-                    ? '예: {"1": 0.6, "2": 0.4}'
-                    : '예: ["1", "2"]'
-                }
-                value={display}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    update(key, def.type === "object" ? {} : []);
-                    return;
-                  }
-                  try {
-                    update(key, JSON.parse(raw));
-                  } catch {
-                    // Keep the raw string as-is until it parses; avoids
-                    // wiping the user's keystrokes mid-edit.
-                    update(key, raw);
-                  }
-                }}
-              />
-              <p className="mt-1 text-xs text-amber-700">
-                전용 입력 위젯이 곧 추가됩니다. 임시로 JSON 형식을
-                입력하세요.
+              <p className="rounded border border-dashed border-gray-300 p-2 text-xs text-gray-600">
+                이 파라미터({label})는 다른 카드의 전용 위젯에서 입력합니다.
               </p>
             </FieldLabel>
           );

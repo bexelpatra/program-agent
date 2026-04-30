@@ -98,6 +98,34 @@ export const ko = {
       "초기 자본이 너무 적습니다. universe 의 최소 가격을 고려해 늘리세요.",
     notice: "기간이 자동 조정됐습니다",
   },
+  // TASK-200: AssetWeightMap 위젯용. JSON-string 입력을 영구 제거하고
+  // 자산별 슬라이더/숫자 입력 + 합계/정규화/현금 잔여 안내에 사용한다.
+  weight: {
+    total: "합계",
+    distributeEvenly: "균등 분배",
+    normalize: "100% 정규화",
+    reset: "초기화",
+    cashRemainder: "현금 잔여",
+    exceeds100: "합계가 100% 를 초과합니다",
+  },
+  // TASK-201: FilterConfigBuilder 위젯용. 필터 다중 선택 + AND 결합 안내.
+  filter: {
+    add: "+ 필터 추가",
+    remove: "삭제",
+    noFilters: "필터 없음 — 모든 자산이 항상 보유 자격을 가집니다.",
+    andCombined: "개 — AND 결합",
+  },
+  // TASK-204: AssetWeightMap 매수 불가능 자산 amber 경고 배너.
+  // 사용자 사고(run_id=56, BTC 100% × $10k → 0개 체결 → equity 평탄선)
+  // 재발 방지. 정수 주 자산(KR/US ETF·지수)에 한정 — 코인은 fractional
+  // 매매가 가능하므로 경고 대상에서 제외 (TASK-205 참조).
+  unbuyable: {
+    title: "매수 불가 자산 감지",
+    cryptoOk: "암호화폐는 소수점 매매가 가능 — 작은 비중에서도 체결됩니다.",
+    priceLoading: "최근 가격을 불러오는 중...",
+    noPriceData: "가격 데이터 없음 — 백필 진행 중이거나 신규 등록 직후일 수 있습니다.",
+    actionHint: "초기 자본을 늘리거나 해당 자산의 비중을 줄이세요.",
+  },
 } as const;
 
 /**

@@ -150,7 +150,7 @@ class TradeRecord(BaseModel):
     time: datetime
     asset_id: int
     side: Literal["BUY", "SELL"]
-    qty: int
+    qty: float  # CRYPTO 는 fractional (소수점 8자리), 그 외는 정수. JSON 직렬화는 float.
     price: float
     commission: float
     currency: str

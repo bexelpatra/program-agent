@@ -23,6 +23,7 @@ import {
   BacktestRunSchema,
   ErrorResponseSchema,
   HealthResponseSchema,
+  OhlcvListSchema,
   PaginatedAssetsSchema,
   StrategyListResponseSchema,
 } from "./schemas";
@@ -138,6 +139,33 @@ export const api = {
 
   getAsset: (assetId: number) =>
     fetchAndValidate(`/api/assets/${assetId}`, AssetSchema),
+
+  // TASK-204: 자산 일봉 OHLCV. start/end 는 ISO date (YYYY-MM-DD).
+  // /backtests/new 에서 최근 close 가격을 prefetch 해 매수 불가능
+  // 자산을 사전에 amber 경고로 안내하는 데 사용.
+  getAssetOhlcv: (assetId: number, start: string, end: string) =>
+    fetchAndValidate(
+      `/api/assets/${assetId}/ohlcv?start=${start}&end=${end}`,
+      OhlcvListSchema,
+    ),
+
+  // TASK-204: 자산의 가장 최근 일봉 close 를 조회.
+  // 직전 14일 윈도우(주말·공휴일·갭 흡수)로 OHLCV 호출 후 마지막 row 의
+  // close 를 반환. 데이터가 1건도 없으면 null (백필 미완료 자산 또는
+  // 신규 등록 직후). 호출 사이트에서 null 은 "경고 평가 보류" 처리.
+  getAssetLatestPrice: async (assetId: number): Promise<number | null> => {
+    const today = new Date();
+    const end = today.toISOString().slice(0, 10);
+    const startDate = new Date(today);
+    startDate.setDate(startDate.getDate() - 14);
+    const start = startDate.toISOString().slice(0, 10);
+    const points = await fetchAndValidate(
+      `/api/assets/${assetId}/ohlcv?start=${start}&end=${end}`,
+      OhlcvListSchema,
+    );
+    if (points.length === 0) return null;
+    return points[points.length - 1].close;
+  },
 
   createAsset: (payload: AssetCreate) =>
     fetchAndValidate("/api/assets", AssetCreateResponseSchema, {

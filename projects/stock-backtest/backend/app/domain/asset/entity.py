@@ -18,6 +18,26 @@ Market = Literal["KR", "US", "CRYPTO"]
 AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO"]
 
 
+# ===== Fractional 매매 정책 (V3 Q8 재결정 — 2026-04-29) =====
+# architecture.md V3 § "거래 정책" L609-615 근거.
+# 코인 한정 fractional: BTC 1코인 = $50k 같은 고가 자산이 작은 자본으로 매수
+# 불가능해 모든 백테스트가 평탄선이 되는 사고(run_id=56) 방지.
+# 일반 주식의 fractional shares 는 실거래에서 일부 증권사만 지원하므로 V3 는
+# CRYPTO 시장만 허용. 주식/ETF/지수/채권/원자재(KR/US)는 1주 단위 정수 유지.
+
+FRACTIONAL_MARKETS: frozenset[str] = frozenset({"CRYPTO"})
+FRACTIONAL_PRECISION: int = 8  # 소수점 자리수 (ohlcv Numeric(20,8) 와 일관)
+
+
+def is_fractional_market(market: str) -> bool:
+    """주어진 market 이 fractional(소수점) 매매 허용 시장인지.
+
+    True 면 Portfolio.buy / execute_rebalance 가 Decimal 8자리 정밀도로 매매를
+    실행한다. False 면 1주 단위 정수 강제. 호출자(domain.trade)가 분기에 사용.
+    """
+    return market in FRACTIONAL_MARKETS
+
+
 @dataclass(frozen=True)
 class Asset:
     """카탈로그에 등록된 단일 자산.

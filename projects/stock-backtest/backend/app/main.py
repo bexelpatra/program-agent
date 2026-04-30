@@ -112,9 +112,15 @@ def create_app() -> FastAPI:
 
     # 비개발자 사용자가 Next.js 프런트(`NEXT_PUBLIC_API_BASE_URL`)에서 호출하는 것을 허용.
     # 프로덕션에서는 운영 도메인을 추가해야 한다.
+    # stock-backtest frontend 는 systemd 영속화로 3001 포트 사용. dev 디폴트 3000 도 함께 허용.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

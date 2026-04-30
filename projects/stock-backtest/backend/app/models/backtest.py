@@ -150,7 +150,10 @@ class BacktestEquity(Base):
 class BacktestTrade(Base):
     """단일 매매 체결 한 건.
 
-    qty 는 정수 주 (V3 거래 정책 § FX trade 미기록 L389) — Numeric(20, 0).
+    qty 는 V3 Q8 재결정(2026-04-29) 으로 Numeric(20, 8) — 코인 한정 fractional.
+    주식/ETF/지수/채권/원자재(KR/US) 는 정수 주 (Decimal(int) 형태로 저장),
+    암호화폐(CRYPTO) 는 소수점 8자리 (BTC 1코인 = $50k 같은 고가 자산이 작은
+    자본으로 매수 불가능해 모든 백테스트가 평탄선이 되는 사고 방지).
     price 는 native currency (자산의 currency) 가격 — Numeric(20, 8).
     commission 은 시장별 차등 (KR 0.015% / US 0.005% / Crypto 0.1%) — base_currency 가 아닌 native.
 
@@ -182,8 +185,9 @@ class BacktestTrade(Base):
     )
     # CHECK 제약으로 BUY/SELL 만 허용 (FX trade 미기록 정책).
     side: Mapped[str] = mapped_column(String(8), nullable=False)
-    # 정수 주 (소수 주 미지원, V3 거래 정책).
-    qty: Mapped[Decimal] = mapped_column(Numeric(20, 0), nullable=False)
+    # V3 Q8 재결정(2026-04-29): 정수/소수 자산 통합 — Numeric(20, 8).
+    # 알렘빅 0004_fractional_qty 마이그레이션으로 0001/0002/0003 baseline 에서 변환.
+    qty: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     # 자산 native currency 가격 — base_currency 환산은 결과 표시 단계에서.
     price: Mapped[Decimal] = mapped_column(Numeric(20, 8), nullable=False)
     # 시장별 차등 수수료 (KR 0.015% / US 0.005% / Crypto 0.1%). native currency.

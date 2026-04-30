@@ -187,7 +187,7 @@ def get_backtest_result(
             time=row.time,
             asset_id=row.asset_id,
             side=row.side,  # type: ignore[arg-type]
-            qty=int(row.qty),
+            qty=float(row.qty),
             price=float(row.price),
             commission=float(row.commission),
             currency=row.currency,

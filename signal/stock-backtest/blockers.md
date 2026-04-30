@@ -34,3 +34,10 @@
 - 사유: pykrx 1.2.7 이 ETF 분배금 / 주식 배당을 종합 API 로 제공하지 않아 `PykrxSource.fetch_dividends` 가 빈 리스트를 반환한다 (실측 확인: `069500` 1년 구간 `[]`). 한국 ETF 백테스트 결과에서 배당 수익이 누락된다.
 - 우회 방안: MVP 는 빈 구현으로 진행 (KR 자산 사용자가 배당 가정 없이 비교 가능). 향후 KRX 정보시스템 분배금 API 또는 별도 데이터 소스(예: FinanceDataReader, KRX OpenAPI) 도입 필요. UI 에 "KR 자산은 배당 미반영" 명시 (UI/UX 원칙 2 — 사용자 직접 노출).
 - 처리 결과: TODO
+
+## BLOCKER-003 [SOFT] (TASK-214)
+- 발견 시점: 2026-04-30T00:00
+- 차단 영역: 데이터 수집 / 거래 엔진 — 분할/증자/감자 정공법 (corporate_actions SPLIT 이벤트 엔진 적용 + pykrx 분할 데이터 수집)
+- 사유: 분할/증자/감자 발생 시 비조정 close 를 그대로 사용하면 가격 점프 → MA 등 시그널이 가짜 발동된다. MVP 임시처방으로 yfinance 어댑터를 `auto_adjust=True` 로 전환해 close 자체가 split/dividend 소급 보정된 가격을 사용하도록 했다 (yfinance 자산은 자동 보정). 그러나 pykrx 어댑터는 비조정 한계가 그대로 남아 있고 (한국 ETF 는 분할이 거의 없어 실전 영향 적으나 0 은 아님), yfinance auto_adjust 방식도 "과거 가격이 매 분할마다 바뀌는" 비표준 방식이라 정공법은 아니다.
+- 우회 방안: MVP 임시처방 (yfinance auto_adjust=True + pykrx 한계 명시) 로 진행. 정공법은 (a) pykrx/yfinance 양쪽에서 SPLIT 이벤트를 별도 수집해 `corporate_actions` 테이블에 기록, (b) 엔진이 매일 EOD 시점에 portfolio.position.qty 를 split 비율로 동적 조정, (c) 가격은 비조정 close 그대로 사용 (조정은 보유 수량 측에서 수행) 형태로 구현 필요. → Phase 2 백로그.
+- 처리 결과: TODO

@@ -62,6 +62,54 @@ _FILTERS: dict[str, tuple[type, type]] = {
 }
 
 
+def _resolve_symbol_keys_to_asset_ids(params: dict[str, Any]) -> dict[str, Any]:
+    """allocator_params 의 dict 형 비중 (예: weights={"BTC-USD": 0.5}) 에서
+    string key (symbol) 를 asset_id (int) 로 자동 매핑.
+
+    UI 가 AssetWeightMap 위젯 미구현 상태라 사용자가 symbol 로 입력하는 케이스 대응.
+    동일 symbol 이 여러 market 에 존재하면 첫 일치 (active 우선) 사용.
+    매핑 실패 symbol 은 ValueError.
+    """
+    from sqlalchemy import select
+
+    from app.core.db import SessionLocal
+    from app.models.asset import Asset
+
+    if not isinstance(params.get("weights"), dict):
+        return params
+
+    weights = params["weights"]
+    needs_resolve = [k for k in weights.keys() if isinstance(k, str) and not k.lstrip("-").isdigit()]
+    if not needs_resolve:
+        return params
+
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(Asset).where(Asset.symbol.in_(needs_resolve))
+        ).scalars().all()
+        symbol_to_id: dict[str, int] = {}
+        for r in rows:
+            # active 우선, 같은 symbol 이 여러 market 이면 첫 일치
+            if r.symbol not in symbol_to_id or r.active:
+                symbol_to_id[r.symbol] = r.asset_id
+
+    missing = [s for s in needs_resolve if s not in symbol_to_id]
+    if missing:
+        raise ValueError(
+            f"weights 의 symbol 을 자산 카탈로그에서 찾을 수 없습니다: {missing}. "
+            f"자산 카탈로그(/assets)에서 먼저 등록하거나 정확한 ticker 를 사용하세요."
+        )
+
+    new_weights: dict[int, float] = {}
+    for k, v in weights.items():
+        if isinstance(k, str) and not k.lstrip("-").isdigit():
+            new_weights[symbol_to_id[k]] = v
+        else:
+            new_weights[int(k)] = v
+
+    return {**params, "weights": new_weights}
+
+
 def build_strategy_from_config(strategy_config: dict[str, Any]) -> Strategy:
     """API 입력 dict (StrategyConfig.model_dump()) → 도메인 Strategy 객체.
 
@@ -74,7 +122,9 @@ def build_strategy_from_config(strategy_config: dict[str, Any]) -> Strategy:
             f"unknown allocator: {allocator_name} (allowed: {list(_ALLOCATORS)})"
         )
     AllocCls, AllocParams = _ALLOCATORS[allocator_name]
-    allocator = AllocCls(AllocParams(**strategy_config["allocator_params"]))
+    raw_params = strategy_config["allocator_params"]
+    resolved_params = _resolve_symbol_keys_to_asset_ids(raw_params)
+    allocator = AllocCls(AllocParams(**resolved_params))
 
     signal_filters: list[Any] = []
     for fc in strategy_config.get("filter_configs") or []:
@@ -173,18 +223,29 @@ def _persist_results(
             )
         repo.insert_equity_points(run_id, equity_rows)
 
-        # trades: TradeFill 은 time 미보유 (도메인은 시점을 settlement_d 로 알고 있으나
-        # fill 객체에는 적재 안 됨) — 현재 시각 fallback. 향후 engine 이 settlement_d 를
-        # fill 에 첨부하면 그 값을 사용하도록 개선 (다음 제안에 명시).
-        now = datetime.now(timezone.utc)
+        # trades: TradeFill.settlement_date (모델 A 의 D+1 체결일) 를 backtest_trades.time
+        # 에 적재. UTC midnight 으로 환산 (DateTime(timezone=True) 컬럼).
+        # TASK-212 (2026-04-30): 이전에는 fill 에 time 필드 없어 datetime.now() fallback
+        # 이 적용되어 모든 trades 가 백테스트 실행 시각으로 기록되는 버그가 있었음.
         trade_dicts: list[dict[str, Any]] = []
         for fill in result.fills:
+            # V3 Q8 재결정 (2026-04-29): qty_filled 는 Decimal — 정수 자산은
+            # Decimal(int), CRYPTO 는 8자리 소수. backtest_trades.qty 컬럼이
+            # 0004 마이그레이션으로 Numeric(20,8) 이라 그대로 적재 가능.
+            qty_value = (
+                fill.qty_filled
+                if isinstance(fill.qty_filled, Decimal)
+                else Decimal(fill.qty_filled)
+            )
+            trade_time = datetime.combine(
+                fill.settlement_date, datetime.min.time(), tzinfo=timezone.utc
+            )
             trade_dicts.append(
                 {
-                    "time": getattr(fill, "time", now),
+                    "time": trade_time,
                     "asset_id": fill.asset_id,
                     "side": fill.side,
-                    "qty": Decimal(fill.qty_filled),
+                    "qty": qty_value,
                     "price": Decimal(fill.price),
                     "commission": Decimal(fill.commission),
                     "currency": fill.currency,

@@ -239,9 +239,53 @@ V3 Phase 1 MVP 완료 태스크 append-only 로그.
 - files: projects/stock-backtest/{backend/app/services/{data_loader.py, backtest_runner.py}, backend/scripts/smoke_e2e.py, README.md}
 - 핵심 발견: FxRate(base=USD, quote=KRW).rate=1300 이 정확히 base_per_ccy=KRW per USD 와 일치 (도메인 컨벤션 검증)
 
+### TASK-212 (DONE) - 2026-04-30T09:30
+- title: trade.time 백테스트 실행 시각 fallback 버그 수정 — TradeFill.settlement_date 추가
+- assignee: coder
+- summary: TradeFill dataclass 에 settlement_date 필드 추가 + _execute_sells/_execute_buys 시그니처에 rebalance_date 추가 + execute_rebalance 가 두 함수에 전달 + backtest_runner.py:242 fallback 제거. 5단계 명세대로. 단위 테스트 5건 신규, 회귀 0 (77 passed).
+- files: backend/app/domain/trade.py, backend/app/services/backtest_runner.py, backend/tests/domain/{__init__.py, test_trade.py}
+- 핵심 발견: 골든 스냅샷이 trade time 필드 비교 안 함 — TASK-215 baseline 갱신 사유에서 제외
 
+### TASK-213 (DONE) - 2026-04-30T09:30
+- title: 백필 정책 변경 — 자산의 가장 오래된 데이터부터 수집 (earliest_available)
+- assignee: coder
+- summary: DataSource Protocol 에 earliest_available(symbol) 추가 + yfinance(period='max') / pykrx(1995년부터) 구현 + pipeline._resolve_start 시그니처 확장 + backfill_asset 호출부 갱신. DEFAULT_MAX_LOOKBACK_DAYS 는 fallback. 단위 테스트 6건, 회귀 0 (68 passed).
+- files: backend/app/data/sources/{base, yfinance_source, pykrx_source}.py, backend/app/data/pipeline.py, backend/tests/data/test_pipeline.py
+- 후속: TASK-216 사용자 액션 (BTC asset_id=56 ohlcv 삭제+재백필)
 
+### TASK-211 (DONE) - 2026-04-30T09:55
+- title: 엔진 청산 누락 버그 수정 — engine.py:219 if target_weights: 분기 제거
+- assignee: coder
+- summary: 빈 dict 도 execute_rebalance 호출하도록 변경. trade.py:_classify_orders 가 보유 자산 전량 매도 처리. invariant("보유 자산 ⊆ universe") 박제 + KeyError silent 0 금지 정책. 단위 테스트 5건 + e2e replay (run_id=96 BTC + MA(117) + quarterly 시나리오). 89 passed.
+- files: backend/app/domain/engine.py, backend/app/domain/trade.py, backend/tests/domain/test_engine.py, backend/tests/e2e/test_failure_replay.py
+- 후속 권장: engine.py L275 broad except 좁히기 (NonTradingDayError/MissingPriceError/InsufficientFundsError 만)
 
+### TASK-214 (DONE) - 2026-04-30T09:55
+- title: 분할/증자/감자 처리 — 임시처방 (yfinance auto_adjust=True + pykrx 한계 명시)
+- assignee: coder
+- summary: yfinance_source.py:83 auto_adjust=True 전환 (close=Adj Close 자동) + Adj Close 컬럼 누락 시 close fallback. pykrx 코멘트 갱신 (Phase 2 정공법 BLOCKER-003). architecture.md "분할/증자/감자 (V3 MVP 임시처방)" 섹션 추가. blockers.md BLOCKER-003 [SOFT] 등록. 회귀 29 passed.
+- files: backend/app/data/sources/{yfinance_source, pykrx_source}.py, signal/stock-backtest/architecture.md, signal/stock-backtest/blockers.md
+- 핵심 발견: 캐시된 yfinance ohlcv 는 auto_adjust=False 시점 데이터 — TASK-216 사용자 통지에 BTC 외 yfinance 자산 재백필 권고 추가 검토
+
+### TASK-216 (DONE) - 2026-04-30T10:30
+- by: manager (Manager 가 사용자 위임 받아 venv python 으로 직접 실행)
+- 결과:
+  - DELETE asset_id=56 ohlcv: 1825 rows 제거
+  - backfill_asset(YfinanceSource): rows_inserted=4242, status=PARTIAL, requested_start=2014-09-17
+  - 검증 SELECT MIN/MAX/COUNT: MIN=2014-09-17 09:00 KST, MAX=2026-04-28 09:00 KST, COUNT=4242
+- DoD 충족: MIN < 2017-01-01 ✅, COUNT > 3000 ✅
+- 핵심 검증: requested_start 가 2014-09-17 로 잡힘 → TASK-213 `earliest_available()` 정책 정상 작동 증거
+- 후속:
+  - TASK-217 (자산 추가 시 자동 백필) — `_LoggingEnqueuer` placeholder 교체
+  - 사용자가 원래 시나리오 (BTC 100% + MA(120) + 분기 + 2017~) 재실행해서 e2e 검증 필요
+
+### TASK-215 (DONE) - 2026-04-30T10:10
+- title: 골든 baseline 9 케이스 통합 재생성 (Tester)
+- assignee: tester
+- severity: observation
+- summary: **재생성 불필요** 결정. fixture 가 backend/tests/golden/test_golden_scenarios.py:69-100 _make_trending_series 의 순수 수학 합성 (math.sin 결정적 noise) — yfinance/DB/random 호출 0 → TASK-214 가격 보정 영향 0. TASK-211 청산 path 미진입 (signal_filters=tuple()). TASK-212 time 필드 비교 안 함. 9 케이스 모두 통과 (12 passed; 확장 회귀 72 passed).
+- files: signal/stock-backtest/tester-report-TASK-215.md
+- 핵심 발견: scenario_3 (BTC) 3 파일이 작업트리에 이미 수정됨 — TASK-205 (V3 Q8 fractional crypto) 의 의도된 회귀 (severity: observation)
 
 
 

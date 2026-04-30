@@ -97,9 +97,9 @@ class PykrxSource:
 
     ticker 형식: 한국거래소 6자리 코드 (예: '069500' = KODEX 200).
     timezone: KST (UTC+9) 강제 부여.
-    수정주가: pykrx 의 기본 `get_market_ohlcv` 는 비조정가. 향후 `adjusted=True`
-    옵션 또는 별도 조정 계수 호출이 필요하나 MVP 에서는 close 값을 adj_close
-    로도 사용한다 (split/dividend 보정 미반영).
+    수정주가: pykrx 의 기본 get_market_ohlcv 는 비조정가. MVP 임시 처방 — split/dividend
+    비반영 (한국 ETF 는 분할이 거의 없어 실전 영향 적음). 정공법(SPLIT 이벤트 →
+    portfolio.qty 조정 + pykrx 별도 분할 데이터 수집) 은 BLOCKER-003 → Phase 2 백로그.
     """
 
     def fetch_ohlcv(self, symbol: str, start: date, end: date) -> list[OhlcvBar]:
@@ -191,3 +191,29 @@ class PykrxSource:
                 latest=None,
                 note=f"검증 실패: {exc}",
             )
+
+    def earliest_available(self, symbol: str) -> date | None:
+        """pykrx 가 알려주는 자산의 가장 오래된 일봉 날짜.
+
+        TASK-213: pykrx 는 yfinance 의 period='max' 같은 옵션이 없어
+        넉넉한 과거 시점(1995-01-01) 부터 today 까지 한 번에 조회 후 첫 행 사용.
+        한국거래소 일봉 시계열은 1995년경 시작이므로 이 시작일로 사실상 모든 과거를 커버.
+        예외는 None 으로 흡수 + warning 로깅 → 호출자 fallback 활성.
+        """
+        _rate_limit()
+        try:
+            historical_start = date(1995, 1, 1)
+            today = date.today()
+            df = stock.get_market_ohlcv(
+                historical_start.strftime("%Y%m%d"),
+                today.strftime("%Y%m%d"),
+                symbol,
+            )
+            if df is None or df.empty:
+                return None
+            return df.index.min().date()
+        except Exception as exc:  # noqa: BLE001 - 외부 어댑터 경계
+            logger.warning(
+                "earliest_available failed for symbol=%s: %s", symbol, exc
+            )
+            return None

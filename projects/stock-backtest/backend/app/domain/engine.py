@@ -209,6 +209,10 @@ def run_backtest(ctx: BacktestRunContext) -> BacktestRunResult:
             prices_until_d = ctx.prices_aligned.loc[:d]
 
             # 전략 적용 (필터 AND → allocator).
+            # 빈 dict 도 정상 결과 — strategy.py L154 주석 "cash-only 로 해석".
+            # 보유 포지션이 있으면 trade._classify_orders L191-198 가 전량 매도 sells
+            # 에 추가 → 청산 동작 (TASK-211 회귀: 이전엔 if target_weights 분기로
+            # execute_rebalance 호출 자체를 skip 했음 → filter fail 시 청산 누락 버그).
             target_weights = apply_filters_and_allocator(
                 ctx.strategy,
                 universe_asset_ids,
@@ -216,46 +220,67 @@ def run_backtest(ctx: BacktestRunContext) -> BacktestRunResult:
                 d,
             )
 
-            if target_weights:
-                # 체결일 = D+1 (모델 A). D 가 마지막 거래일이거나 캘린더 미지원이면 스킵.
-                settlement_d: date | None = None
-                try:
-                    settlement_d = next_trading_day(ctx.base_currency, d)
-                except Exception as e:
-                    _LOG.warning(
-                        "next_trading_day failed at signal_date=%s: %s", d, e
-                    )
+            # universe 부분집합 invariant (TASK-211): 보유 자산은 항상 universe 부분집합.
+            # universe 가 백테스트 동안 고정 (universe_market_meta 불변), 매수는 universe
+            # 자산만 가능 (apply_filters_and_allocator 가 universe_asset_ids 만 weight
+            # 산출), 매도는 보유 자산만 → 보유 ⊆ universe 구조적 보장.
+            # 빈 target_weights entry path 에서 settlement_prices/asset_meta 가 보유
+            # 자산을 cover 하기 위한 전제 조건. 위반은 silent 0 가 아닌 명시적 에러로 catch.
+            held_not_in_universe = [
+                aid
+                for aid in portfolio.positions.keys()
+                if aid not in ctx.universe_market_meta
+            ]
+            if held_not_in_universe:
+                # 정상 흐름에서는 발생 불가 — 발생하면 universe_market_meta 변조 등
+                # 호출자 버그. silent 진행하지 않고 명시적 에러 (실거래 정합성 원칙).
+                raise ValueError(
+                    f"invariant violation at {d}: held assets not in universe: "
+                    f"{held_not_in_universe}"
+                )
 
-                if (
-                    settlement_d is not None
-                    and settlement_d in ctx.prices_aligned.index
-                ):
-                    # D+1 종가 기반 체결 (yfinance 일봉만 보유 시 시가 fallback = 종가).
-                    settlement_prices = _eod_prices_dict(
-                        ctx.prices_aligned, settlement_d, universe_asset_ids
+            # 체결일 = D+1 (모델 A). D 가 마지막 거래일이거나 캘린더 미지원이면 스킵.
+            settlement_d: date | None = None
+            try:
+                settlement_d = next_trading_day(ctx.base_currency, d)
+            except Exception as e:
+                _LOG.warning(
+                    "next_trading_day failed at signal_date=%s: %s", d, e
+                )
+
+            if (
+                settlement_d is not None
+                and settlement_d in ctx.prices_aligned.index
+            ):
+                # D+1 종가 기반 체결 (yfinance 일봉만 보유 시 시가 fallback = 종가).
+                # 빈 target_weights 인 경우에도 보유 청산을 위해 호출 — 단, 청산 시
+                # 가격이 누락된 보유 자산은 trade._execute_sells L216-221 의
+                # avg_price fallback 으로 처리 (sell-only 청산 시나리오 방어).
+                settlement_prices = _eod_prices_dict(
+                    ctx.prices_aligned, settlement_d, universe_asset_ids
+                )
+                fx_at_settlement = ctx.fx_rates_to_base.get(
+                    settlement_d, ctx.fx_rates_to_base.get(d, {})
+                )
+                try:
+                    rebalance_fills = execute_rebalance(
+                        portfolio,
+                        target_weights,
+                        ctx.universe_market_meta,
+                        settlement_prices,
+                        fx_at_settlement,
+                        settlement_d,
                     )
-                    fx_at_settlement = ctx.fx_rates_to_base.get(
-                        settlement_d, ctx.fx_rates_to_base.get(d, {})
+                    fills.extend(rebalance_fills)
+                except Exception as e:
+                    # 리밸런싱 실패 (NonTradingDayError / MissingPriceError /
+                    # 잔고 부족 등) → 로그만, 루프 계속 (1회 누락이 전체 백테스트
+                    # 중단 사유는 아님 — TASK-080 골든 테스트에서 정책 검증).
+                    _LOG.warning(
+                        "rebalance failed at settlement_date=%s: %s",
+                        settlement_d,
+                        e,
                     )
-                    try:
-                        rebalance_fills = execute_rebalance(
-                            portfolio,
-                            target_weights,
-                            ctx.universe_market_meta,
-                            settlement_prices,
-                            fx_at_settlement,
-                            settlement_d,
-                        )
-                        fills.extend(rebalance_fills)
-                    except Exception as e:
-                        # 리밸런싱 실패 (NonTradingDayError / MissingPriceError /
-                        # 잔고 부족 등) → 로그만, 루프 계속 (1회 누락이 전체 백테스트
-                        # 중단 사유는 아님 — TASK-080 골든 테스트에서 정책 검증).
-                        _LOG.warning(
-                            "rebalance failed at settlement_date=%s: %s",
-                            settlement_d,
-                            e,
-                        )
 
         # equity 기록 (D 일 종가 기준).
         eod_prices = _eod_prices_dict(ctx.prices_aligned, d, universe_asset_ids)

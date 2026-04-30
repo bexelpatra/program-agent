@@ -8,16 +8,26 @@ architecture.md V3 § "현금/FX 모델" (L559-600) 의 B 모델 구현체.
   부족 시 base_currency 경유 환전 (양방향 비용)
 - FX 거래는 trade 미기록 (잔고 이동 + spread 차감만, FxConversion 은 감사용 별도 객체)
 - fx_spread_bps = 20bp 디폴트 (한국 증권사 환전 우대 평균)
-- long-only, 음수 잔고 금지, 1주 단위 정수 (V3 § Q7+Q8)
+- long-only, 음수 잔고 금지
+- 매매 단위: V3 Q8 재결정 (2026-04-29) — 코인 한정 fractional.
+  주식/ETF/지수/채권/원자재(KR/US): 1주 단위 정수.
+  암호화폐(CRYPTO): 소수점 8자리 (Decimal). buy/sell 의 fractional 플래그로 분기.
 - 매수 cash 부족 시 가능한 만큼만 체결 (partial fill, 호출자가 비중 미달 결과로 받음)
+
+타입 통일 — Position.qty 는 Decimal:
+- 정수 자산도 Decimal(int) 로 표현 (Decimal("5") 등). float 누적 오차 회피.
+- fractional 자산은 Decimal("0.19994000") 등 8자리.
+- 호출자가 int 를 넘겨도 내부에서 Decimal 로 정규화.
 
 도메인 순수: SQLAlchemy/HTTP/외부 라이브러리 import 금지 — Decimal/datetime/dataclass 만 사용.
 정밀도는 ohlcv 가격 컬럼 Numeric(20,8) 과 정합 위해 Decimal 사용 (float 누적 오차 회피).
 """
 
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Mapping
+
+from app.domain.asset.entity import FRACTIONAL_PRECISION
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -25,21 +35,25 @@ DEFAULT_FX_SPREAD_BPS = Decimal("20")  # 0.20%
 DEFAULT_SLIPPAGE_BPS = Decimal("10")  # 0.10% (V3 CLAUDE.md 거래 정책 디폴트)
 BPS_DIVISOR = Decimal("10000")
 
+# fractional 자산의 Decimal quantize 단위 (10^-8). FRACTIONAL_PRECISION 과 일관.
+_FRACTIONAL_QUANTUM = Decimal(1).scaleb(-FRACTIONAL_PRECISION)
+
 
 @dataclass(frozen=True)
 class Position:
     """자산 보유 1단위 — asset_id 별 (qty, avg_price) 만 갖는 불변값.
 
+    qty 는 Decimal — 정수 자산은 Decimal(int), CRYPTO 는 8자리 소수.
     avg_price 는 native currency 기준 평균 매수가 (slippage·commission 포함된 effective_price).
     """
 
     asset_id: int
     currency: str
-    qty: int
+    qty: Decimal
     avg_price: Decimal
 
     def market_value(self, current_price: Decimal) -> Decimal:
-        return Decimal(self.qty) * current_price
+        return self.qty * current_price
 
 
 @dataclass(frozen=True)
@@ -230,36 +244,60 @@ class Portfolio:
         )
         return [conv]
 
-    # ===== 자산 매매 (long-only, 정수 주, partial fill) =====
+    # ===== 자산 매매 (long-only, partial fill, fractional 분기) =====
 
     def buy(
         self,
         asset_id: int,
         currency: str,
         price: Decimal,
-        qty_target: int,
+        qty_target: int | Decimal,
         commission_bps: Decimal,
         slippage_bps: Decimal = DEFAULT_SLIPPAGE_BPS,
-    ) -> tuple[int, Decimal]:
+        fractional: bool = False,
+    ) -> tuple[Decimal, Decimal]:
         """매수 실행 — slippage 적용 가격 + 수수료 + cash 차감 + position 갱신.
 
-        cash 부족 시 가능한 max qty 만 체결 (partial fill, 1주 단위 정수).
-        반환: (실제 체결 qty, 총 비용 native).
+        cash 부족 시 가능한 max qty 만 체결 (partial fill).
+        fractional=False (디폴트): 1주 단위 정수 (KR/US 주식·ETF·지수·채권·원자재).
+        fractional=True: 소수점 8자리 (CRYPTO). V3 Q8 재결정 (2026-04-29) 근거.
+
+        Args:
+            qty_target: 목표 수량. int 또는 Decimal 허용 — 내부에서 Decimal 정규화.
+            fractional: True 면 Decimal 8자리 정밀도 매수 (코인 전용).
+
+        Returns:
+            (실제 체결 qty: Decimal, 총 비용 native: Decimal).
+            정수 자산도 Decimal(int) 로 반환 (호환).
         """
-        if qty_target <= 0:
-            return (0, ZERO)
+        target = qty_target if isinstance(qty_target, Decimal) else Decimal(qty_target)
+        if target <= ZERO:
+            return (ZERO, ZERO)
 
         effective_price = price * (ONE + slippage_bps / BPS_DIVISOR)
         cost_per_unit = effective_price * (ONE + commission_bps / BPS_DIVISOR)
 
         available = self.cash(currency)
-        max_affordable = int(available / cost_per_unit)
-        actual_qty = min(qty_target, max_affordable)
+        if cost_per_unit <= ZERO:
+            return (ZERO, ZERO)
 
-        if actual_qty <= 0:
-            return (0, ZERO)
+        if fractional:
+            # 소수점 8자리, 항상 내림 (cash 초과 방지).
+            max_affordable = (available / cost_per_unit).quantize(
+                _FRACTIONAL_QUANTUM, rounding=ROUND_DOWN
+            )
+            target_quant = target.quantize(_FRACTIONAL_QUANTUM, rounding=ROUND_DOWN)
+            actual_qty = min(target_quant, max_affordable)
+        else:
+            # 정수 주 — Decimal(int(...)) 로 통일 (Position.qty 타입 일관).
+            max_affordable = Decimal(int(available / cost_per_unit))
+            target_int = Decimal(int(target))
+            actual_qty = min(target_int, max_affordable)
 
-        gross = effective_price * Decimal(actual_qty)
+        if actual_qty <= ZERO:
+            return (ZERO, ZERO)
+
+        gross = effective_price * actual_qty
         commission = gross * (commission_bps / BPS_DIVISOR)
         total_cost = gross + commission
 
@@ -272,7 +310,7 @@ class Portfolio:
         self,
         asset_id: int,
         currency: str,
-        added_qty: int,
+        added_qty: Decimal,
         added_price: Decimal,
     ) -> None:
         """평균 매수가 가중평균 갱신. 신규면 생성, 기존이면 누적 평균."""
@@ -285,39 +323,51 @@ class Portfolio:
 
         new_qty = existing.qty + added_qty
         new_avg = (
-            existing.avg_price * Decimal(existing.qty)
-            + added_price * Decimal(added_qty)
-        ) / Decimal(new_qty)
+            existing.avg_price * existing.qty + added_price * added_qty
+        ) / new_qty
         self.positions[asset_id] = Position(asset_id, currency, new_qty, new_avg)
 
     def sell(
         self,
         asset_id: int,
         price: Decimal,
-        qty: int,
+        qty: int | Decimal,
         commission_bps: Decimal,
         slippage_bps: Decimal = DEFAULT_SLIPPAGE_BPS,
-    ) -> tuple[int, Decimal]:
+        fractional: bool = False,
+    ) -> tuple[Decimal, Decimal]:
         """매도 실행 — slippage 매도가 ↓ + 수수료 + position 차감 + cash 입금.
 
         보유 미만 매도는 가능한 max qty 만 (음수 잔고 방지, long-only).
-        반환: (실제 체결 qty, 총 입금액 native).
+        fractional 분기는 buy 와 동일 정책 — CRYPTO 만 소수점 8자리, 그 외는 정수.
+
+        Returns:
+            (실제 체결 qty: Decimal, 총 입금액 native: Decimal).
         """
         pos = self.positions.get(asset_id)
-        if pos is None or pos.qty <= 0 or qty <= 0:
-            return (0, ZERO)
+        qty_dec = qty if isinstance(qty, Decimal) else Decimal(qty)
+        if pos is None or pos.qty <= ZERO or qty_dec <= ZERO:
+            return (ZERO, ZERO)
 
-        actual_qty = min(qty, pos.qty)
+        if fractional:
+            requested = qty_dec.quantize(_FRACTIONAL_QUANTUM, rounding=ROUND_DOWN)
+        else:
+            requested = Decimal(int(qty_dec))
+
+        actual_qty = min(requested, pos.qty)
+        if actual_qty <= ZERO:
+            return (ZERO, ZERO)
+
         effective_price = price * (ONE - slippage_bps / BPS_DIVISOR)
 
-        gross = effective_price * Decimal(actual_qty)
+        gross = effective_price * actual_qty
         commission = gross * (commission_bps / BPS_DIVISOR)
         net_received = gross - commission
 
         self.cash_by_ccy[pos.currency] = self.cash(pos.currency) + net_received
 
         new_qty = pos.qty - actual_qty
-        if new_qty == 0:
+        if new_qty <= ZERO:
             del self.positions[asset_id]
         else:
             self.positions[asset_id] = Position(

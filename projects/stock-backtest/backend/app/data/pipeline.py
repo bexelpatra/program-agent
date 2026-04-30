@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 BACKOFF_BASE_SECONDS = 1.0  # 1, 2, 4 초 (attempt = 0, 1, 2)
-DEFAULT_MAX_LOOKBACK_DAYS = 365 * 20  # 신규 자산 최초 백필 상한 — 약 20년
+DEFAULT_MAX_LOOKBACK_DAYS = 365 * 20  # fallback 상한 — source.earliest_available 가 None 일 때만 사용 (TASK-213)
 
 
 @dataclass(frozen=True)
@@ -72,13 +72,35 @@ def _trading_days(market: str, start: date, end: date) -> list[date]:
     return [pd_ts.date() for pd_ts in sessions]
 
 
-def _resolve_start(latest: datetime | None, end: date, max_lookback_days: int) -> date:
+def _resolve_start(
+    latest: datetime | None,
+    end: date,
+    max_lookback_days: int,
+    *,
+    source: DataSource | None = None,
+    symbol: str | None = None,
+) -> date:
     """ohlcv MAX(time) 으로부터 다음 백필 시작일을 계산.
 
-    None (신규 자산) 이면 end - max_lookback_days. 이미 end 이후면 end + 1 반환
-    (호출자가 'no-op' 으로 처리하도록).
+    신규 자산 (`latest is None`) 정책 (TASK-213):
+      1. source.earliest_available(symbol) 호출 시도 → 결과 있으면 그 날짜 사용
+      2. None 또는 source/symbol 미제공이면 fallback: end - max_lookback_days
+
+    이미 end 이후면 end + 1 반환 (호출자가 'no-op' 으로 처리하도록).
     """
     if latest is None:
+        if source is not None and symbol is not None:
+            try:
+                earliest = source.earliest_available(symbol)
+            except Exception as exc:  # noqa: BLE001 - 어댑터 보호
+                logger.warning(
+                    "earliest_available raised for %s: %s — fallback to max_lookback",
+                    symbol,
+                    exc,
+                )
+                earliest = None
+            if earliest is not None:
+                return earliest
         return end - timedelta(days=max_lookback_days)
     return latest.date() + timedelta(days=1)
 
@@ -139,7 +161,9 @@ def backfill_asset(
     asset_repo = SqlAssetRepository(session)
 
     latest = ohlcv_repo.latest_time(asset.asset_id)
-    start = _resolve_start(latest, end, max_lookback_days)
+    start = _resolve_start(
+        latest, end, max_lookback_days, source=source, symbol=asset.symbol
+    )
     if start > end:
         # 이미 최신까지 적재되어 있는 상태. no-op 로 OK 기록.
         log_repo.record(asset.asset_id, start, end, "OK", 0)
