@@ -18,6 +18,8 @@ from app.domain.allocators import (
     EqualWeightParams,
     FixedWeight,
     FixedWeightParams,
+    MaSignal,
+    MaSignalParams,
 )
 from app.domain.filters import (
     Momentum,
@@ -62,6 +64,14 @@ def list_strategies() -> StrategyListResponse:
             type="allocator",
             params_schema=EqualWeightParams.model_json_schema(),
             description="균등 비중 (1/N)",
+        ),
+        StrategyDescriptor(
+            name=MaSignal.name,
+            type="allocator",
+            params_schema=MaSignalParams.model_json_schema(),
+            description=(
+                "이동평균 시그널 — 자산별 가격이 MA 위면 매수, 아래면 청산 (cash 처리)"
+            ),
         ),
     ]
     filters = [

@@ -41,3 +41,10 @@
 - 사유: 분할/증자/감자 발생 시 비조정 close 를 그대로 사용하면 가격 점프 → MA 등 시그널이 가짜 발동된다. MVP 임시처방으로 yfinance 어댑터를 `auto_adjust=True` 로 전환해 close 자체가 split/dividend 소급 보정된 가격을 사용하도록 했다 (yfinance 자산은 자동 보정). 그러나 pykrx 어댑터는 비조정 한계가 그대로 남아 있고 (한국 ETF 는 분할이 거의 없어 실전 영향 적으나 0 은 아님), yfinance auto_adjust 방식도 "과거 가격이 매 분할마다 바뀌는" 비표준 방식이라 정공법은 아니다.
 - 우회 방안: MVP 임시처방 (yfinance auto_adjust=True + pykrx 한계 명시) 로 진행. 정공법은 (a) pykrx/yfinance 양쪽에서 SPLIT 이벤트를 별도 수집해 `corporate_actions` 테이블에 기록, (b) 엔진이 매일 EOD 시점에 portfolio.position.qty 를 split 비율로 동적 조정, (c) 가격은 비조정 close 그대로 사용 (조정은 보유 수량 측에서 수행) 형태로 구현 필요. → Phase 2 백로그.
 - 처리 결과: TODO
+
+## BLOCKER-004 [SOFT] (TASK-219, TASK-220)
+- 발견 시점: 2026-04-30T11:50
+- 차단 영역: 환경 / 운영 — 살아있는 backend 서비스가 stale 코드 사용 중
+- 사유: TASK-219 (ma_signal allocator) + TASK-220 (semi_annual schedule) 디스크 코드는 등록 완료되었으나, `quant-lab-backend.service` (user systemd unit, PID 150526, port 8001) 가 **2026-04-29 20:52 시작** 한 stale 인스턴스 → uvicorn 워커가 ma_signal/semi_annual 미반영 코드 load 중. `curl /api/strategies` 결과: `['fixed_weight', 'all_weather', 'equal_weight']` (ma_signal 누락 = 직접 증거). Tester `tests/e2e/test_persona_first_use.py::step3` 1건 fail (5/6 passed) 의 원인.
+- 우회 방안 (사용자 액션): `systemctl --user restart quant-lab-backend.service` 1회 실행. 재시작 후 `curl http://127.0.0.1:8001/api/strategies | jq '.allocators[].name'` → 4종 (`ma_signal` 포함) 확인 + persona 재실행 → 6/6 PASS 기대.
+- 처리 결과: TODO (사용자 액션 대기)

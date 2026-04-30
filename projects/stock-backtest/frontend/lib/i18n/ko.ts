@@ -76,6 +76,9 @@ export const ko = {
     done: "완료 — 결과 보기",
     doneTitle: "완료",
     doneRedirecting: "결과 화면으로 이동 중...",
+    // TASK-218: 인플레이스 결과 표시 시 안내 문구. doneRedirecting 과 분리 —
+    // 더 이상 라우팅하지 않고 같은 페이지에 결과를 그린다.
+    doneInPlace: "결과를 아래에서 확인하세요.",
     seeResult: "결과 보기 →",
     retry: "다시 시도",
     newBacktest: "새 백테스트",

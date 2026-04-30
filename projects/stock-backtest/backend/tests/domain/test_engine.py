@@ -338,3 +338,66 @@ class TestHeldSubsetOfUniverseInvariant:
         result = run_backtest(ctx)
         assert not result.aborted
         assert 1 not in result.final_portfolio.positions
+
+
+# ---------------------------------------------------------------------------
+# 회귀 3: _is_rebalance_day semi_annual 분기 (TASK-220)
+# ---------------------------------------------------------------------------
+
+
+class TestIsRebalanceDaySemiAnnual:
+    """반기 (semi_annual) — 1월·7월 첫 거래일 trigger.
+
+    의미론: (month-1)//6 변경 → 0 (1~6월) 또는 1 (7~12월). 사용자 결정 (2026-04-30):
+    quarterly 와 일관, 휴일 보정은 calendar 위임 (engine 은 거래일만 받음).
+    """
+
+    def test_january_first_trading_day_triggers(self) -> None:
+        """이전 거래일이 12월 → 1월 첫 거래일은 trigger."""
+        from app.domain.engine import _is_rebalance_day
+
+        prev = date(2024, 12, 30)  # 2024 H2 (cur_h=1)
+        cur = date(2025, 1, 2)  # 2025 H1 (cur_h=0) — year 변경 + half 변경
+        assert _is_rebalance_day(cur, prev, "semi_annual") is True
+
+    def test_july_first_trading_day_triggers(self) -> None:
+        """이전 거래일이 6월 → 7월 첫 거래일은 trigger."""
+        from app.domain.engine import _is_rebalance_day
+
+        prev = date(2025, 6, 30)  # 2025 H1 (cur_h=0)
+        cur = date(2025, 7, 1)  # 2025 H2 (cur_h=1)
+        assert _is_rebalance_day(cur, prev, "semi_annual") is True
+
+    def test_other_month_within_same_half_returns_false(self) -> None:
+        """같은 반기 내 (1~6월 또는 7~12월) 인접 거래일은 trigger 아님."""
+        from app.domain.engine import _is_rebalance_day
+
+        # H1 내부 (3월 → 4월).
+        assert (
+            _is_rebalance_day(date(2025, 4, 1), date(2025, 3, 31), "semi_annual")
+            is False
+        )
+        # H2 내부 (8월 → 9월).
+        assert (
+            _is_rebalance_day(date(2025, 9, 1), date(2025, 8, 29), "semi_annual")
+            is False
+        )
+        # H1 첫째 달 (1월 → 2월) — 같은 H1.
+        assert (
+            _is_rebalance_day(date(2025, 2, 3), date(2025, 1, 31), "semi_annual")
+            is False
+        )
+
+    def test_within_same_half_repeated_call_false(self) -> None:
+        """같은 반기 내 두 번째 호출 — trigger 아님 (1월 trigger 후 2월 호출)."""
+        from app.domain.engine import _is_rebalance_day
+
+        # 1월 첫 거래일 trigger 직후 동일 반기 내 다음 호출.
+        prev = date(2025, 1, 2)
+        cur = date(2025, 1, 3)
+        assert _is_rebalance_day(cur, prev, "semi_annual") is False
+        # 같은 반기의 더 뒤 시점도 false.
+        assert (
+            _is_rebalance_day(date(2025, 6, 30), date(2025, 1, 2), "semi_annual")
+            is False
+        )

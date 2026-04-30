@@ -31,11 +31,13 @@ from typing import Literal, Protocol
 import pandas as pd
 
 # rebalance_schedule 허용값 (Quant Lab CLAUDE.md L13).
+# semi_annual: 반기 (1월·7월 첫 거래일 trigger — quarterly 와 의미론 일관, TASK-220).
 RebalanceSchedule = Literal[
     "daily",
     "weekly",
     "monthly",
     "quarterly",
+    "semi_annual",
     "yearly",
     "signal_event",
 ]

@@ -1,28 +1,25 @@
 "use client";
 
 /**
- * ProgressPanel — TASK-094 in-place 진행률 패널.
+ * ProgressPanel — TASK-094 (초안) → TASK-218 (인플레이스 결과 표시) 패널.
  *
  * /backtests/new 화면이 폼 모드 ↔ 진행 모드를 토글할 때 표시되는 카드.
- * 별도 라우트 (예: /backtests/[run_id]/progress) 를 만들지 않는 이유:
- *   UI/UX 원칙 6 (점진적 노출, 화면 3개 한도) — 화면은 카탈로그 / new /
- *   결과 [run_id] 3개로 고정. 진행률은 new 화면 안에서 in-place 로
- *   처리하고, terminal 상태가 되면 결과 화면으로 라우팅한다.
+ * TASK-218 부터 status='done' 일 때 결과 화면으로 자동/수동 라우팅하지
+ * 않는다 — 호출부 (page.tsx) 가 같은 페이지에서 결과 컴포넌트를 in-place
+ * 렌더링한다. 이력 화면 (`/backtests/[run_id]`) 으로의 진입은 별도
+ * 경로 (앱 메인 이력 카드) 에서만 트리거한다.
  *
  * 분기:
  *   - error (네트워크 등 ApiError): 빨강 카드 + 추적 ID + "다시 시도"
  *   - run==null + loading: "백테스트 생성 중..."
  *   - run==null + !loading: "대기" (이론상 도달하지 않지만 안전망)
  *   - status=='pending' | 'running': 진행률 바 + 취소 버튼
- *   - status=='done': 자동 라우팅 1.5s 후 + "결과 보기" 버튼
+ *   - status=='done': 완료 안내 카드만 (호출부가 결과를 렌더링)
  *   - status=='failed': 빨강 카드 + run.error.{message,stage,trace_id}
  *   - status=='cancelled': 회색 카드 + "새 백테스트"
  *
  * 모든 텍스트는 ko.progress / ko.errorGuide 에서 가져온다 — UI/UX 원칙 3.
  */
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-
 import type { BacktestRun } from "@/lib/api/schemas";
 import { ko } from "@/lib/i18n/ko";
 import { ApiError } from "@/lib/api/client";
@@ -30,7 +27,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const AUTO_REDIRECT_MS = 1500;
 const TRACE_ID_PREFIX_LEN = 16;
 
 export interface ProgressPanelProps {
@@ -78,18 +74,9 @@ export function ProgressPanel({
   onCancel,
   onReset,
 }: ProgressPanelProps) {
-  const router = useRouter();
-
-  // status='done' 이 되면 1.5초 뒤 결과 화면으로 자동 라우팅.
-  // 사용자가 그 사이 "결과 보기" 버튼을 누르면 즉시 이동 (수동 우선).
-  useEffect(() => {
-    if (run?.status !== "done") return;
-    const runId = run.run_id;
-    const t = setTimeout(() => {
-      router.push(`/backtests/${runId}`);
-    }, AUTO_REDIRECT_MS);
-    return () => clearTimeout(t);
-  }, [run?.status, run?.run_id, router]);
+  // TASK-218: status='done' 자동 라우팅 제거. 같은 페이지(`/backtests/new`)
+  // 에서 호출부가 결과를 in-place 렌더링한다. 결과 화면 라우팅이 필요한
+  // 진입점(앱 메인 이력 카드 등) 은 그쪽에서 직접 router.push 한다.
 
   // 1) 폴링 자체 실패 (네트워크 등)
   if (error) {
@@ -123,7 +110,8 @@ export function ProgressPanel({
   const status = run.status;
   const pct = formatPct(run.progress);
 
-  // 3) 완료 — 자동 라우팅 + "결과 보기"
+  // 3) 완료 — 라우팅 없음. 호출부 (`/backtests/new`) 가 같은 페이지에
+  //    결과 패널을 in-place 렌더한다 (TASK-218). "새 백테스트" 버튼만 노출.
   if (status === "done") {
     return (
       <Card className="border-green-200 bg-green-50 p-6">
@@ -131,14 +119,10 @@ export function ProgressPanel({
           {ko.progress.doneTitle}
         </h3>
         <p className="mt-2 text-sm text-green-800">
-          {ko.progress.doneRedirecting}
+          {ko.progress.doneInPlace}
         </p>
-        <Button
-          variant="default"
-          className="mt-4"
-          onClick={() => router.push(`/backtests/${run.run_id}`)}
-        >
-          {ko.progress.seeResult}
+        <Button variant="secondary" className="mt-4" onClick={onReset}>
+          {ko.progress.newBacktest}
         </Button>
       </Card>
     );

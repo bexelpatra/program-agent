@@ -267,6 +267,61 @@ V3 Phase 1 MVP 완료 태스크 append-only 로그.
 - files: backend/app/data/sources/{yfinance_source, pykrx_source}.py, signal/stock-backtest/architecture.md, signal/stock-backtest/blockers.md
 - 핵심 발견: 캐시된 yfinance ohlcv 는 auto_adjust=False 시점 데이터 — TASK-216 사용자 통지에 BTC 외 yfinance 자산 재백필 권고 추가 검토
 
+### TASK-218 (DONE) - 2026-04-30T11:30
+- by: coder (frontend in-place 결과 패널)
+- 변경: page.tsx (539→615 lines, 좌+우 sticky 2-column), ProgressPanel.tsx (router.push 두 곳 + useRouter import + AUTO_REDIRECT_MS 모두 제거), useFormPersistence hook 신규 (138 lines, __version: 1 + migrate 콜백), useFormPersistence.test.ts 신규 (6/6 PASS), vitest.config.ts 신규, ko.ts (progress.doneInPlace 키), package.json devDep (jsdom, @testing-library/*).
+- DoD: (a) URL 변경 0 ✅, (b) 새로고침 폼 복원 ✅ (단위 6/6), (c) 파라미터 일부 변경 후 재실행 폼 유지 ✅, (d) /backtests/[run_id] 회귀 0 (파일 미수정).
+- 검증: npm run build 6/6 페이지, vitest 6/6 (532ms), typecheck/lint OK.
+- 후속: 메인(/) 이력 카드 진입 경로 별도 확인 권장 (TASK-218 범위 밖).
+- files: signal/stock-backtest/coder-report-TASK-218.md
+
+### TASK-219 (DONE) - 2026-04-30T11:30
+- by: coder (ma_signal allocator)
+- 변경: allocators/ma_signal.py 신규 (자산 단위 fallback + normalize_weights allow_cash_slot=True), allocators/__init__.py re-export, services/backtest_runner.py:53-58 _ALLOCATORS 등록, api/strategies.py:60-67 list_strategies 에 추가, tests/domain/test_ma_signal_allocator.py 신규 (8/8 PASS), architecture.md:670 allocators 행 4종 갱신.
+- DoD: (a) 단위 8/8 ✅, (b) e2e BTC100% w120 quarterly **수동 검증 위임** (Manager가 사용자 시나리오로 확인), (c) 9 골든 회귀 0 (12/12) ✅, (d) GET /api/strategies 에 ma_signal 등장 ✅.
+- frontend 변경 0: JSON Schema 자동 폼 + complexFieldRenderer 가 ma_signal `assets: dict` 를 AssetWeightMap 으로 자동 주입.
+- 후속 발견 (TASK-221 신규 등록): tests/api/test_api_contract.py::test_strategies_endpoint_returns_mvp_presets 의 `assert len(allocators) == 3` 하드코딩 회귀 — Tester 가 4 + 'ma_signal' 포함 단언으로 갱신 필요.
+- files: signal/stock-backtest/coder-report-TASK-219.md
+
+### TASK-222 (DONE) - 2026-04-30T11:50
+- by: tester (severity: environment)
+- 변경: tests/e2e/test_persona_first_use.py 갱신 (함수명 _allocator3 → _allocator4, set 단언에 ma_signal 추가, "ma_signal" in allocator_names 명시 단언 추가).
+- 결과: 6 collected, 5 passed, 1 failed. step3 fail = environment (살아있는 quant-lab-backend.service stale 코드).
+- BLOCKER-004 등록 (사용자 액션: systemctl --user restart quant-lab-backend.service).
+- files: signal/stock-backtest/tester-report-TASK-222.md
+
+### TASK-220 (Tester 검증) - 2026-04-30T11:50
+- by: tester (severity 부여 없음, 코드 결함 0)
+- 결과: 단위 22/22 (test_engine.py 9 포함), 골든 12/12, frontend build/typecheck PASS, Literal 7값 3-way 동기 정확, semi_annual 4 transition (12→1월 True / 6→7월 True / 4→5월 False / 동일 H 재호출 False) 모두 expected.
+- 클린 아키텍처: quarterly ↔ semi_annual `(month-1)//N` 거울 패턴 (N=3↔6).
+- observation: signal_event UI 미노출 (pre-existing), Literal 수동 동기 부담 (V3 범위 외).
+- files: signal/stock-backtest/tester-report-TASK-220.md
+
+### TASK-220 (DONE) - 2026-04-30T11:50
+- by: coder (semi_annual = 1월·7월 첫 거래일, 사용자 결정)
+- 변경: strategy.py Literal 7값, schemas/backtest.py 동기, engine.py `_is_rebalance_day` semi_annual 분기 `(d.month-1)//6` 패턴, frontend Zod enum 7값, page.tsx REBALANCE_OPTIONS 에 "반기" 한 줄, tests/domain/test_engine.py 에 TestIsRebalanceDaySemiAnnual 4 케이스.
+- DoD: (a) 단위 22/22 (4 신규 + 18 기존) ✅, (b) npm run build + Zod enum 7값 ✅, (c) 단위로 1월·7월 trigger / 다른 월 false 검증 ✅.
+- 주의: Coder 가 tests/ 수정함 — task description 에 명시 (단위 4 케이스 추가) 라 합리적이나, coder.md L188 (tests/ 수정 금지) 와 모호한 지점. 회고 후보.
+- files: signal/stock-backtest/coder-report-TASK-220.md
+
+### TASK-218 (Tester 검증) - 2026-04-30T11:50
+- by: tester (severity: observation, 코드 결함 0)
+- 결과: 7/7 검증 PASS (단위 6/6, build, typecheck, lint, router.push 제거, localStorage 키 충돌 0, [run_id] 회귀 0).
+- 클린 아키텍처: useFormPersistence hook 정상 분리, ProgressPanel unused import 제거됨, BacktestResultPanel inline (70 lines, 합리적).
+- observation 2건: (1) Coder line count 615 vs 실측 794 (+179 차이, 회고), (2) BacktestResultPanel inline (Coder 명시 결정).
+- files: signal/stock-backtest/tester-report-TASK-218.md
+
+### TASK-219 (Tester 검증) + TASK-221 (DONE) - 2026-04-30T11:50
+- by: tester (severity: observation)
+- TASK-219 검증: 단위 8/8 PASS, 9 골든 12/12 PASS, 자산 단위 fallback (BTC 130일/ETH 50일/window=120) 검증, 클린 아키텍처 무결 (FixedWeight 패턴 100% 일치).
+- TASK-221 처리: tests/api/test_api_contract.py:78-94 갱신 (`len==3 → ==4` + `"ma_signal" in names`). 3 passed.
+- 발견 후속:
+  - TASK-222 신규 (persona harness 동일 하드코딩 갱신 — tests/e2e/test_persona_first_use.py:92-110)
+  - MaSignalParams/FixedWeightParams 검증 중복 — 5번째 allocator 시점에 utils 추출
+  - golden test_golden_scenarios.py:377 baseline 매트릭스는 의도적 락
+- 환경 노트: anaconda host 에 backend 의존성 (schemathesis/pydantic-settings/fastapi/SQLAlchemy/psycopg2-binary/exchange_calendars/APScheduler/yfinance/pykrx) 설치됨 (테스트 collection 활성화 목적). docker compose 에 backend 서비스 부재로 host 실행이 정책.
+- files: signal/stock-backtest/tester-report-TASK-219.md
+
 ### TASK-216 (DONE) - 2026-04-30T10:30
 - by: manager (Manager 가 사용자 위임 받아 venv python 으로 직접 실행)
 - 결과:

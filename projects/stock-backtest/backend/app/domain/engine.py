@@ -117,6 +117,8 @@ def _is_rebalance_day(
     - weekly: ISO 주차 변경 시
     - monthly: 월 변경 시 (예: 1/31 → 2/1 True)
     - quarterly: 분기 변경 시 ((month-1)//3 변경)
+    - semi_annual: 반기 변경 시 ((month-1)//6 변경) — 1월·7월 첫 거래일 trigger.
+      quarterly 와 의미론 일관 (TASK-220 사용자 결정 2026-04-30).
     - yearly: 연도 변경 시
     - signal_event: 매일 시그널 체크 (실제 변화 여부는 allocator/filter 결정)
     """
@@ -134,6 +136,10 @@ def _is_rebalance_day(
         prev_q = (prev_d.month - 1) // 3
         cur_q = (d.month - 1) // 3
         return cur_q != prev_q or d.year != prev_d.year
+    if schedule == "semi_annual":
+        prev_h = (prev_d.month - 1) // 6
+        cur_h = (d.month - 1) // 6
+        return cur_h != prev_h or d.year != prev_d.year
     if schedule == "yearly":
         return d.year != prev_d.year
     if schedule == "signal_event":

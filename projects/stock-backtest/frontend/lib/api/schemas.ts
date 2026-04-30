@@ -151,6 +151,7 @@ export const RebalanceScheduleEnum = z.enum([
   "weekly",
   "monthly",
   "quarterly",
+  "semi_annual",
   "yearly",
   "signal_event",
 ]);

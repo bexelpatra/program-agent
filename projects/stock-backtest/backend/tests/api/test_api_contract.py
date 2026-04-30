@@ -76,14 +76,20 @@ def test_health_endpoint(client: TestClient) -> None:
 
 
 def test_strategies_endpoint_returns_mvp_presets(client: TestClient) -> None:
-    """GET /api/strategies — DB 의존 없음. allocator 3 + filter 2 (MVP)."""
+    """GET /api/strategies — DB 의존 없음. allocator 4 (MVP 3 + 사용자 명시 ma_signal,
+    TASK-219) + filter 2.
+
+    TASK-221: ma_signal 추가 (TASK-219) 로 allocator 카운트가 3 → 4 로 의도 증가.
+    set-based 단언으로 추후 추가 회귀 (allocator 5 번째) 도 명시적으로 잡힘.
+    """
     resp = client.get("/api/strategies")
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body["allocators"]) == 3
+    assert len(body["allocators"]) == 4
     assert len(body["filters"]) == 2
     names = {a["name"] for a in body["allocators"]}
-    assert names == {"fixed_weight", "all_weather", "equal_weight"}
+    assert names == {"fixed_weight", "all_weather", "equal_weight", "ma_signal"}
+    assert "ma_signal" in names
     filter_names = {f["name"] for f in body["filters"]}
     assert filter_names == {"moving_average", "momentum"}
 

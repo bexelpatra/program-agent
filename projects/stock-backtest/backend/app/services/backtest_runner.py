@@ -33,6 +33,8 @@ from app.domain.allocators import (
     EqualWeightParams,
     FixedWeight,
     FixedWeightParams,
+    MaSignal,
+    MaSignalParams,
 )
 from app.domain.engine import BacktestRunContext, run_backtest
 from app.domain.filters import (
@@ -54,6 +56,7 @@ _ALLOCATORS: dict[str, tuple[type, type]] = {
     "fixed_weight": (FixedWeight, FixedWeightParams),
     "all_weather": (AllWeather, AllWeatherParams),
     "equal_weight": (EqualWeight, EqualWeightParams),
+    "ma_signal": (MaSignal, MaSignalParams),
 }
 
 _FILTERS: dict[str, tuple[type, type]] = {

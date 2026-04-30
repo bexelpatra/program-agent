@@ -26,11 +26,13 @@ from pydantic import BaseModel, ConfigDict, Field
 BacktestStatus = Literal["pending", "running", "done", "failed", "cancelled"]
 
 # domain.strategy.RebalanceSchedule 와 동일 값. HTTP 경계에서 동기.
+# semi_annual: 반기 (1월·7월 첫 거래일 trigger — TASK-220).
 RebalanceSchedule = Literal[
     "daily",
     "weekly",
     "monthly",
     "quarterly",
+    "semi_annual",
     "yearly",
     "signal_event",
 ]

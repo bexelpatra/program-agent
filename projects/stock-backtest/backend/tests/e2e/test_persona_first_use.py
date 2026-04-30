@@ -6,7 +6,8 @@
 검증 흐름 (사용자 첫 접속 → 백테스트 1회 실행):
   step1. /assets 페이지 한국어 키워드 (UI/UX 원칙 2)
   step2. /api/assets 시드 카탈로그 (SPY, KODEX 200 (069500), BTC-USD, ETH-USD)
-  step3. /api/strategies 가 allocator 3 + filter 2 + JSON Schema 노출
+  step3. /api/strategies 가 allocator 4 + filter 2 + JSON Schema 노출
+         (MVP 3 + 사용자 명시 ma_signal, TASK-219)
   step4. POST /api/backtests with asset_id 정수 키 weights → 422 없음
   step5. run_id 폴링 → terminal status 도달
   step6. /backtests/new 가 새 위젯들의 한국어 키워드 노출 (UI/UX 원칙 1)
@@ -89,10 +90,12 @@ def test_step2_assets_api_lists_seed_catalog(backend_alive: None) -> None:
 # --- step3 ---------------------------------------------------------------
 
 
-def test_step3_strategies_api_exposes_allocator3_filter2(backend_alive: None) -> None:
-    """MVP 프리셋: allocator 3 + filter 2 = 5 모두 노출 + JSON Schema 포함.
+def test_step3_strategies_api_exposes_allocator4_filter2(backend_alive: None) -> None:
+    """allocator 4 (MVP 3 + 사용자 명시 ma_signal, TASK-219) + filter 2 + JSON Schema 포함.
 
-    Quant Lab CLAUDE.md L26 (MVP 3종 + 시그널 필터 2종).
+    Quant Lab CLAUDE.md L26 (MVP 3종 + 시그널 필터 2종) 에 ma_signal 추가.
+    TASK-222: ma_signal 추가 (TASK-219) 로 allocator 카운트가 3 → 4 로 의도 증가.
+    set-based 단언으로 추후 추가 회귀 (allocator 5 번째) 도 명시적으로 잡힘.
     """
     r = requests.get(f"{BACKEND}/api/strategies", timeout=5)
     assert r.status_code == 200
@@ -103,7 +106,9 @@ def test_step3_strategies_api_exposes_allocator3_filter2(backend_alive: None) ->
         "fixed_weight",
         "all_weather",
         "equal_weight",
+        "ma_signal",
     }, f"allocator set drift: {allocator_names}"
+    assert "ma_signal" in allocator_names
     assert filter_names == {
         "moving_average",
         "momentum",
