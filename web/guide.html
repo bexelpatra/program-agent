@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>사용 가이드 — Claude Coach</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <div id="error-banner" class="error-banner hidden" role="alert"></div>
+
+  <header class="page-header">
+    <div class="header-title">
+      <a href="/" class="guide-back">← 대시보드로 돌아가기</a>
+      <h1>
+        사용 가이드 — 클로드 코드 잘 쓰는 법
+        <span class="help" tabindex="0" aria-label="도움말" data-tip="당신의 최근 세션을 분석해서 어떤 축이 약한지 진단하고, 5개 축의 원칙·예시·내 사례를 같이 보여줍니다."> ? </span>
+      </h1>
+      <p class="subtitle">5개 축 · 원칙 · 안티패턴/좋은패턴 · 내 사례 — 그리고 Claude 코칭</p>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <div id="guide-loading" class="guide-loading">불러오는 중…</div>
+    <div id="guide-root" class="guide-page hidden"></div>
+  </main>
+
+  <script src="guide.js"></script>
+</body>
+</html>

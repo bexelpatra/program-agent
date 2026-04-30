@@ -11,25 +11,29 @@
   <div id="error-banner" class="error-banner hidden" role="alert"></div>
 
   <header class="page-header">
+    <a href="/guide" class="guide-link" aria-label="사용 가이드 페이지로 이동">사용 가이드 →</a>
     <div class="header-title">
-      <h1>Claude Coach</h1>
+      <h1>
+        Claude Coach
+        <span class="help" tabindex="0" aria-label="도움말" data-tip="클로드 코드 사용 패턴을 분석해 학습 자료로 보여주는 로컬 대시보드. ~/.claude/projects 의 트랜스크립트를 Stop 훅으로 자동 분석합니다."> ? </span>
+      </h1>
       <p class="subtitle">메타인지 학습 대시보드 — 내 프롬프트가 Claude 의 사고를 어떻게 이끌었는지 살펴보세요</p>
     </div>
     <div class="header-stats">
       <div class="stat-card">
-        <div class="stat-label">총 세션</div>
+        <div class="stat-label">총 세션<span class="help" tabindex="0" aria-label="도움말" data-tip="분석된 클로드 코드 세션의 수. 같은 session_id 는 한 번만 셉니다.">?</span></div>
         <div class="stat-value mono" id="stat-total-sessions">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">누적 학습 시간</div>
+        <div class="stat-label">누적 학습 시간<span class="help" tabindex="0" aria-label="도움말" data-tip="각 세션의 첫 메시지부터 마지막 메시지까지 시간을 합산. 실제 손가락 움직인 시간이 아니라 세션이 열려 있던 wall-clock 시간입니다.">?</span></div>
         <div class="stat-value mono" id="stat-total-time">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">평균 Coach Score</div>
+        <div class="stat-label">평균 Coach Score<span class="help" tabindex="0" aria-label="도움말" data-tip="모든 세션 점수의 평균 (0–100). 5개 축(명료성·효율성·경제성·계획성·건강도) 각 0–20점 합산.">?</span></div>
         <div class="stat-value mono" id="stat-avg-score">–</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">최근 10세션 평균</div>
+        <div class="stat-label">최근 10세션 평균<span class="help" tabindex="0" aria-label="도움말" data-tip="가장 최근 10개 세션 점수의 평균. 옆 화살표는 전체 평균 대비 차이 — 위로 가면 최근에 잘하고 있다는 뜻입니다.">?</span></div>
         <div class="stat-value mono">
           <span id="stat-recent-score">–</span>
           <span id="stat-recent-delta" class="delta"></span>
@@ -47,53 +51,58 @@
     <div id="dashboard" class="dashboard hidden">
       <section class="grid-row">
         <div class="card chart-card">
-          <h2>5축 레이더</h2>
+          <h2>5축 레이더<span class="help" tabindex="0" aria-label="도움말" data-tip="다섯 가지 평가 축 (각 0–20점):
+• 명료성 — 프롬프트가 길고 구체적이며 정정이 적은가
+• 효율성 — 도구를 병렬로 묶어 호출하고 Bash 실패가 적은가
+• 경제성 — 서브에이전트로 컨텍스트를 보호하고 같은 파일을 반복 read 하지 않는가
+• 계획성 — TaskCreate / 플랜 모드 / extended thinking 을 활용하는가
+• 건강도 — 정정 신호가 적고 user→assistant 비율이 적정한가">?</span></h2>
           <p class="card-hint">전체 평균 vs 최근 10세션</p>
           <div class="chart-wrap"><canvas id="radar-chart"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h2>Coach Score 트렌드</h2>
+          <h2>Coach Score 트렌드<span class="help" tabindex="0" aria-label="도움말" data-tip="시간순으로 최근 30 세션의 Coach Score (0–100) 변화. 우상향이면 사용 습관이 개선되는 중.">?</span></h2>
           <p class="card-hint">최근 30 세션 (시간순)</p>
           <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h2>툴 사용 분포</h2>
+          <h2>툴 사용 분포<span class="help" tabindex="0" aria-label="도움말" data-tip="모든 세션에서 호출된 툴 종류별 빈도 상위 8개. Bash·Read·Edit 가 많고 Agent·Plan 류가 적으면 단순 반복 패턴, 반대로 Agent 비율이 높으면 컨텍스트 절약 패턴.">?</span></h2>
           <p class="card-hint">전체 합산 상위 8개</p>
           <div class="chart-wrap"><canvas id="tools-chart"></canvas></div>
         </div>
       </section>
 
       <section class="card">
-        <h2>사고 과정 시각화</h2>
+        <h2>사고 과정 시각화<span class="help" tabindex="0" aria-label="도움말" data-tip="Claude 가 어떻게 생각하고 일했는지 보여주는 4가지 핵심 지표. 사용자 목표('AI 사고 과정 가시화')의 중심 영역입니다.">?</span></h2>
         <p class="card-hint">메타인지 핵심 지표</p>
         <div class="metric-grid">
           <div class="metric-card">
-            <div class="metric-label">누적 thinking 토큰량 (chars)</div>
+            <div class="metric-label">누적 thinking 토큰량 (chars)<span class="help" tabindex="0" aria-label="도움말" data-tip="Claude 가 응답 전에 내부적으로 추론한 'extended thinking' 글자 수의 합. 많을수록 어려운 문제를 천천히 풀어낸 시간이 길었다는 뜻.">?</span></div>
             <div class="metric-value mono" id="metric-thinking">–</div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">평균 병렬 도구 호출 비율</div>
+            <div class="metric-label">평균 병렬 도구 호출 비율<span class="help" tabindex="0" aria-label="도움말" data-tip="한 메시지에 2개 이상 툴을 동시에 호출한 비율. 독립적인 read·grep 을 묶어 부르면 시간·토큰을 아낄 수 있어서 높을수록 좋습니다 (목표 25% 이상).">?</span></div>
             <div class="metric-value mono" id="metric-parallel">–</div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">서브에이전트 활용 회수</div>
+            <div class="metric-label">서브에이전트 활용 회수<span class="help" tabindex="0" aria-label="도움말" data-tip="Agent 툴 호출 횟수 (Explore·general-purpose·Plan 등). 메인 컨텍스트를 보호해서 긴 세션에서도 정확도를 유지합니다.">?</span></div>
             <div class="metric-value mono" id="metric-subagent">–</div>
           </div>
           <div class="metric-card">
-            <div class="metric-label">정정 신호 비율</div>
+            <div class="metric-label">정정 신호 비율<span class="help" tabindex="0" aria-label="도움말" data-tip="사용자 프롬프트에 '아니야', '다시', 'no', 'stop', 'don't' 등이 들어간 비율. 높으면 첫 프롬프트가 충분히 명확하지 않아 왕복이 많았다는 뜻.">?</span></div>
             <div class="metric-value mono" id="metric-correction">–</div>
           </div>
         </div>
       </section>
 
       <section class="card">
-        <h2>개인 맞춤 팁</h2>
+        <h2>개인 맞춤 팁<span class="help" tabindex="0" aria-label="도움말" data-tip="모든 세션의 자동 생성 팁을 종류별로 집계해, 가장 자주 등장한 priority=1 (긴급) 팁 5개. 'N개 세션에서 보임' 숫자가 클수록 반복되는 패턴이라 우선 개선하면 효과가 큽니다.">?</span></h2>
         <p class="card-hint">여러 세션에 반복 등장한 priority=1 패턴 상위 5개</p>
         <div id="tips-list" class="tips-list"></div>
       </section>
 
       <section class="card">
-        <h2>세션 타임라인</h2>
+        <h2>세션 타임라인<span class="help" tabindex="0" aria-label="도움말" data-tip="최신 세션부터 시간순. 행을 클릭하면 그 세션의 모든 메트릭·5축 점수·툴 분포·맞춤 팁을 자세히 볼 수 있습니다.">?</span></h2>
         <p class="card-hint">최신순 — 행을 클릭하면 자세히 볼 수 있어요</p>
         <div class="table-wrap">
           <table class="sessions-table">

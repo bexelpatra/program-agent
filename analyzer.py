@@ -149,6 +149,12 @@ def analyze(transcript_path: Path) -> dict:
 
     pending_tool_use = {}  # tool_use_id -> tool name
 
+    # 시퀀스 추적 (worst-spot 추출용)
+    # 각 원소: ("user", text, ts) 또는 ("asst", [tool_names...], ts)
+    sequence: list[tuple] = []
+    edit_count = 0
+    write_count = 0
+
     for d in _safe_iter_jsonl(transcript_path):
         t = d.get("type")
         sid = d.get("sessionId")
@@ -178,9 +184,11 @@ def analyze(transcript_path: Path) -> dict:
             prompt_lens.append(L)
             if first_prompt_chars is None:
                 first_prompt_chars = L
-            if CORRECTION_RE.search(text):
+            is_correction = bool(CORRECTION_RE.search(text))
+            if is_correction:
                 correction_signals += 1
             specificity_scores.append(_prompt_specificity(text))
+            sequence.append(("user", text, ts, is_correction))
 
         elif t == "user":
             content = d.get("message", {}).get("content")
@@ -232,6 +240,7 @@ def analyze(transcript_path: Path) -> dict:
                 assistant_msgs_with_tools += 1
                 if len(tool_uses) >= 2:
                     parallel_tool_msgs += 1
+                sequence.append(("asst", [tu.get("name", "?") for tu in tool_uses], ts))
             for tu in tool_uses:
                 name = tu.get("name", "?")
                 tu_id = tu.get("id")
@@ -250,6 +259,10 @@ def analyze(transcript_path: Path) -> dict:
                     plan_tool_uses += 1
                 if name == "Bash":
                     bash_total += 1
+                if name == "Edit":
+                    edit_count += 1
+                if name == "Write":
+                    write_count += 1
                 if name == "Read":
                     fp = inp.get("file_path", "")
                     if fp:
@@ -288,6 +301,24 @@ def analyze(transcript_path: Path) -> dict:
     redundant_searches = sum(c - 1 for c in grep_patterns.values() if c > 1)
 
     thinking_chars_avg_per_turn = round(thinking_chars_total / assistant_turns_main, 1) if assistant_turns_main else 0.0
+
+    # ---------- 세션 유형 분류 ----------
+    session_type, session_type_reason = classify_session_type(
+        user_turns=user_turns_main,
+        assistant_turns=assistant_turns_main,
+        tool_calls_total=tool_calls_total,
+        correction_rate=correction_rate,
+        edit_string_not_found=edit_string_not_found,
+        bash_fail_rate=bash_fail_rate,
+        bash_total=bash_total,
+        edit_count=edit_count,
+        write_count=write_count,
+        plan_tool_uses=plan_tool_uses,
+        file_reads_total=file_reads_total,
+    )
+
+    # ---------- worst-spot 추출 ----------
+    worst_spots = extract_worst_spots(sequence)
 
     metrics = {
         "session_id": session_id,
@@ -332,10 +363,153 @@ def analyze(transcript_path: Path) -> dict:
         "thinking_blocks": thinking_blocks,
         "thinking_chars_avg_per_turn": thinking_chars_avg_per_turn,
         "assistant_text_chars": assistant_text_chars,
+
+        "edit_count": edit_count,
+        "write_count": write_count,
+
+        "session_type": session_type,
+        "session_type_reason": session_type_reason,
+        "worst_spots": worst_spots,
     }
     metrics["score"] = compute_score(metrics)
     metrics["tips"] = generate_tips(metrics)
     return metrics
+
+
+# ---------- 세션 유형 분류 ----------
+SESSION_TYPES = ["one_shot", "exploration", "implementation", "debugging", "mixed"]
+SESSION_TYPE_LABELS_KO = {
+    "one_shot": "단발 질문",
+    "exploration": "탐색형",
+    "implementation": "구현형",
+    "debugging": "디버깅형",
+    "mixed": "복합형",
+}
+
+
+def classify_session_type(
+    *,
+    user_turns: int,
+    assistant_turns: int,
+    tool_calls_total: int,
+    correction_rate: float,
+    edit_string_not_found: int,
+    bash_fail_rate: float,
+    bash_total: int,
+    edit_count: int,
+    write_count: int,
+    plan_tool_uses: int,
+    file_reads_total: int,
+) -> tuple[str, str]:
+    """세션 유형과 사유 한 줄 반환. 첫 매치 우선."""
+    if user_turns <= 2 and assistant_turns <= 5 and tool_calls_total <= 3:
+        return "one_shot", "짧은 질문/응답으로 종료"
+    debug_signals = 0
+    if correction_rate >= 0.30:
+        debug_signals += 1
+    if edit_string_not_found >= 2:
+        debug_signals += 1
+    if bash_total >= 3 and bash_fail_rate >= 0.30:
+        debug_signals += 1
+    if debug_signals >= 1:
+        return "debugging", f"정정/실패 신호 {debug_signals}개 (correction_rate={correction_rate:.0%}, edit_err={edit_string_not_found}, bash_fail={bash_fail_rate:.0%})"
+    if (edit_count + write_count) >= 5 or plan_tool_uses >= 3:
+        return "implementation", f"수정/작성 {edit_count + write_count}회, 계획 도구 {plan_tool_uses}회"
+    if file_reads_total >= 8 or tool_calls_total >= 15:
+        return "exploration", f"탐색 read {file_reads_total}회, 총 도구 {tool_calls_total}회"
+    return "mixed", "단일 분류에 들어맞지 않음"
+
+
+# ---------- worst-spot 추출 ----------
+def extract_worst_spots(sequence: list[tuple]) -> list[dict]:
+    """user 프롬프트와 assistant 도구 호출 시퀀스에서 개선 여지가 큰 구간 1-2개."""
+    spots: list[dict] = []
+
+    # 1) 직렬 read/grep — 한 메시지당 1개씩 ≥3 연속 (병렬화 누락)
+    cur_run_name = None
+    cur_run_msgs: list[int] = []  # asst 인덱스
+    longest_run: tuple[str, list[int]] = ("", [])
+    for i, ev in enumerate(sequence):
+        if ev[0] != "asst":
+            continue
+        names: list[str] = ev[1]
+        if len(names) == 1 and names[0] in ("Read", "Grep", "Glob"):
+            n = names[0]
+            if n == cur_run_name:
+                cur_run_msgs.append(i)
+            else:
+                cur_run_name = n
+                cur_run_msgs = [i]
+            if len(cur_run_msgs) > len(longest_run[1]):
+                longest_run = (n, list(cur_run_msgs))
+        else:
+            cur_run_name = None
+            cur_run_msgs = []
+    if len(longest_run[1]) >= 3:
+        # 그 직전 user 프롬프트 찾기
+        first_idx = longest_run[1][0]
+        prev_user = ""
+        for j in range(first_idx - 1, -1, -1):
+            if sequence[j][0] == "user":
+                prev_user = sequence[j][1]
+                break
+        spots.append({
+            "type": "sequential_tool",
+            "tool": longest_run[0],
+            "count": len(longest_run[1]),
+            "user_prompt_excerpt": _trunc(prev_user, 200),
+            "summary": f"{longest_run[0]} {len(longest_run[1])}회를 각각 다른 메시지로 직렬 호출",
+            "suggestion": f"독립적인 {longest_run[0]} 들은 한 메시지 안에 여러 tool_use 로 묶어 병렬 호출하면 시간·토큰을 크게 아낄 수 있습니다.",
+        })
+
+    # 2) 짧은 첫 프롬프트로 큰 작업 시작 — 첫 user 가 60자 미만인데 그 후 assistant 메시지 ≥ 8
+    first_user_idx = next((i for i, ev in enumerate(sequence) if ev[0] == "user"), None)
+    if first_user_idx is not None:
+        first_text = sequence[first_user_idx][1]
+        if len(first_text) > 0 and len(first_text) < 60:
+            following_asst = sum(1 for ev in sequence[first_user_idx + 1:] if ev[0] == "asst")
+            if following_asst >= 8:
+                spots.append({
+                    "type": "short_first_prompt",
+                    "first_prompt_chars": len(first_text),
+                    "following_asst_turns": following_asst,
+                    "user_prompt_excerpt": _trunc(first_text, 200),
+                    "summary": f"{len(first_text)}자 짧은 프롬프트로 시작해 {following_asst}회 왕복",
+                    "suggestion": "첫 프롬프트에 (1) 어떤 결과면 성공인가 (2) 제약/금지 (3) 예시 입력·출력 을 함께 넣으면 왕복 횟수를 크게 줄일 수 있습니다.",
+                })
+
+    # 3) 정정 신호 클러스터 — 연속한 user 중 correction 가 ≥ 2개
+    correction_indices = [i for i, ev in enumerate(sequence) if ev[0] == "user" and len(ev) > 3 and ev[3]]
+    if len(correction_indices) >= 2:
+        # user 시퀀스 인덱스에서 정정이 인접하면 하나의 "방향 전환"
+        user_indices = [i for i, ev in enumerate(sequence) if ev[0] == "user"]
+        cluster_size = 0
+        max_cluster = (0, None)  # (size, anchor_user_idx)
+        for j, ui in enumerate(user_indices):
+            if ui in correction_indices:
+                cluster_size += 1
+                if cluster_size > max_cluster[0]:
+                    max_cluster = (cluster_size, ui)
+            else:
+                cluster_size = 0
+        if max_cluster[0] >= 2 and max_cluster[1] is not None:
+            text = sequence[max_cluster[1]][1]
+            spots.append({
+                "type": "correction_cluster",
+                "cluster_size": max_cluster[0],
+                "user_prompt_excerpt": _trunc(text, 200),
+                "summary": f"정정 신호 {max_cluster[0]}회 연속 — 방향 전환이 잦았던 지점",
+                "suggestion": "되돌리기를 줄이려면 작업 시작 전 '어떤 결과면 성공인가'를 한 번에 합의해 두고, 큰 변경은 plan mode 로 사용자 승인 후 진행하세요.",
+            })
+
+    return spots[:2]
+
+
+def _trunc(text: str, n: int) -> str:
+    if not text:
+        return ""
+    text = text.replace("\n", " ").strip()
+    return text if len(text) <= n else text[: n - 1] + "…"
 
 
 def _band(value: float, thresholds: list[tuple[float, float]]) -> float:

@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "axes": [
+    {
+      "id": "clarity",
+      "label": "명료성",
+      "summary": "프롬프트가 길고 구체적이며 정정이 적은가",
+      "principles": [
+        {
+          "id": "clarity_first_prompt",
+          "title": "첫 프롬프트에 제약·예시·기대 출력을 한 번에 적어라",
+          "body": "Claude는 사용자의 짧은 질문 뒤에 숨은 의도를 추측하느라 자주 빗나갑니다. 첫 메시지에 (1) 어떤 결과면 성공인가, (2) 절대 하지 말 것, (3) 예시 입력/출력 셋을 함께 넣으면 왕복 횟수가 절반 이하로 줄어듭니다.",
+          "anti_pattern": "지금 어떤 작업 진행중인지 알아?",
+          "good_pattern": "현재 PR(브랜치 X) 의 작업 진행 상태를 정리해줘. 출력은 (남은 todo / 차단요인 / 다음 단계) 3줄. 추측하지 말고 git status·signal/*.md 기준으로만 답해.",
+          "linked_metrics": ["first_prompt_chars", "avg_prompt_chars"]
+        },
+        {
+          "id": "clarity_specificity",
+          "title": "코드 인용·파일 경로·함수명을 적극 사용해 모호함을 제거하라",
+          "body": "백틱 코드, 절대 경로, 함수명·심볼명을 명시하면 Claude가 탐색·매칭에 쓰는 토큰을 절약하고 잘못 찍을 확률도 떨어집니다. 일반어로 묘사하면 '느낌'에 의존해 엉뚱한 곳을 고칠 수 있습니다.",
+          "anti_pattern": "그 함수 좀 고쳐봐",
+          "good_pattern": "`src/server.py:42` 의 `_send_json` 에서 `is_err` 처리 분기 추가해줘. 기존 `Bash` 만 잡는데 `Edit` 도 같이 잡게.",
+          "linked_metrics": ["prompt_specificity"]
+        },
+        {
+          "id": "clarity_success_criteria",
+          "title": "작업 시작 전 '어떤 결과면 성공인가'를 미리 합의하라",
+          "body": "정정·되돌리기는 대부분 합의되지 않은 성공 기준에서 옵니다. \"이 변경이 끝나면 N 테스트가 통과하고 X 화면에서 Y가 보여야 한다\" 같은 검증 가능한 종료 조건을 첫 프롬프트에 박아두면 중간에 방향이 흔들려도 복귀할 수 있습니다.",
+          "anti_pattern": "리팩토링 좀 해줘",
+          "good_pattern": "`server.py` 를 작은 모듈로 분리하되 (1) `python server.py` 가 똑같이 동작 (2) 모든 기존 테스트 통과 (3) import 깊이 2 이하 — 끝나면 git diff 요약과 함께 종료.",
+          "linked_metrics": ["correction_rate", "correction_signals"]
+        }
+      ]
+    },
+    {
+      "id": "efficiency",
+      "label": "효율성",
+      "summary": "도구를 병렬로 묶어 호출하고 실패가 적은가",
+      "principles": [
+        {
+          "id": "efficiency_parallel",
+          "title": "독립적인 read/grep/find 는 한 메시지에 묶어 병렬 호출하라",
+          "body": "한 assistant 메시지 안에 여러 tool_use 블록을 두면 Claude는 모두 동시에 실행합니다. 직렬로 부르면 매번 모델 추론 왕복이 한 번 더 들어가서 시간·토큰이 N배가 됩니다. 결과 간 의존이 없을 때는 무조건 묶으세요.",
+          "anti_pattern": "(1) Read A.py → 응답 → Read B.py → 응답 → Read C.py",
+          "good_pattern": "한 메시지에 [Read A.py, Read B.py, Read C.py] 세 tool_use 를 동시에 보냄",
+          "linked_metrics": ["parallel_rate", "parallel_tool_calls"]
+        },
+        {
+          "id": "efficiency_pre_check",
+          "title": "Bash 실행 전 ls/which/--version 으로 환경을 사전 검증하라",
+          "body": "경로·바이너리·버전 가정으로 명령을 던졌다가 실패하면 디버깅 라운드가 더 비싸집니다. 첫 한 번은 환경 점검에 쓰고, 그 출력을 보고 본 명령을 만드는 패턴이 결과적으로 빠릅니다.",
+          "anti_pattern": "곧장 `pip install foo` 던져서 wrong python 으로 들어감",
+          "good_pattern": "한 메시지에 [`which python3`, `python3 --version`, `pip --version`] 으로 환경 확인 후 명령 결정",
+          "linked_metrics": ["bash_fail_rate", "bash_failures"]
+        },
+        {
+          "id": "efficiency_edit_context",
+          "title": "Edit 의 old_string 에는 주변 3-5줄을 함께 포함해 unique 를 보장하라",
+          "body": "old_string 이 짧으면 다른 위치와 매칭돼 실패하거나 엉뚱한 곳을 바꿉니다. 변경 대상 줄 위·아래 컨텍스트 몇 줄을 같이 잡아 'unique 한 한 위치' 를 명시하면 한 번에 끝납니다.",
+          "anti_pattern": "old_string=\"return 0\"  # 여러 곳에 매칭됨",
+          "good_pattern": "old_string=\"def hook_main():\\n    parse_args()\\n    return 0\"  # 함수 시그니처+직전 호출까지 포함",
+          "linked_metrics": ["edit_string_not_found"]
+        }
+      ]
+    },
+    {
+      "id": "economy",
+      "label": "경제성",
+      "summary": "서브에이전트로 컨텍스트를 보호하고 같은 파일을 반복 read 하지 않는가",
+      "principles": [
+        {
+          "id": "economy_subagent",
+          "title": "코드베이스 탐색이 길어지면 Explore/general-purpose 서브에이전트로 위임하라",
+          "body": "메인 컨텍스트에 grep·read 결과를 30개씩 쌓아두면 후반 작업의 정확도가 떨어집니다. 탐색은 서브에이전트에게 맡기고 요약만 받아오면 메인은 결정과 편집에 집중할 수 있습니다.",
+          "anti_pattern": "메인에서 grep·read 를 50번 직접 돌려 컨텍스트가 포화",
+          "good_pattern": "Agent(subagent_type=Explore, prompt=\"인증 미들웨어 호출되는 모든 경로 찾아서 리스트로 보고\") 한 번으로 끝",
+          "linked_metrics": ["subagent_invocations", "file_reads_total"]
+        },
+        {
+          "id": "economy_no_reread",
+          "title": "같은 파일 반복 read 대신 줄 번호·심볼명을 미리 알려줘라",
+          "body": "Claude 가 같은 파일을 N번 다시 읽는 건 필요한 정보를 처음에 못 받았다는 뜻입니다. 사용자가 `app.js:412` 또는 `class FooBar` 처럼 위치를 미리 짚어주면 한 번의 read 로 끝납니다.",
+          "anti_pattern": "\"app.js 좀 봐\" 만 반복 → Read x4",
+          "good_pattern": "\"app.js:412 의 setupHelpTooltips 함수\" 처럼 줄·심볼 동봉",
+          "linked_metrics": ["file_reread_count", "file_reread_rate"]
+        },
+        {
+          "id": "economy_grep_pattern",
+          "title": "유사한 grep 을 반복하지 말고 한 번에 wider 패턴으로 잡아라",
+          "body": "같은 키워드를 변형해 여러 번 grep 하는 패턴은 처음부터 wider regex 한 번이면 끝납니다. 결과 후처리는 Read 한 번으로 합치면 빠릅니다.",
+          "anti_pattern": "grep 'Send', grep 'send', grep 'sendMessage' 세 번",
+          "good_pattern": "rg -i 'send(message)?' 한 번",
+          "linked_metrics": ["redundant_searches"]
+        }
+      ]
+    },
+    {
+      "id": "planning",
+      "label": "계획성",
+      "summary": "작업 분해와 thinking 활용이 충분한가",
+      "principles": [
+        {
+          "id": "planning_taskcreate",
+          "title": "3단계 이상의 작업은 TaskCreate 로 분해해 진행을 추적하라",
+          "body": "TaskCreate 는 단순 todo 가 아니라 Claude 의 self-monitoring 입니다. 단계가 가시화되면 중간 단계를 빠뜨리거나 사용자 의도와 멀어졌을 때 빠르게 복귀합니다.",
+          "anti_pattern": "다단계 리팩토링을 한 메시지에 통째로 명령",
+          "good_pattern": "첫 메시지에서 'TaskCreate 로 5단계 분해 후 하나씩 in_progress→completed 표시하며 진행' 지시",
+          "linked_metrics": ["plan_tool_uses"]
+        },
+        {
+          "id": "planning_thinking",
+          "title": "어려운 결정 앞에서는 plan mode 또는 extended thinking 을 활용하라",
+          "body": "thinking 토큰은 Claude 가 응답 전 내부 추론에 쓰는 시간입니다. 요구사항 충돌·구조 결정·디버깅 가설 수립처럼 한 번 잘못 가면 비싼 결정에서는 thinking 을 띄우는 것이 결과적으로 비용을 아낍니다.",
+          "anti_pattern": "복잡한 마이그레이션을 thinking 0자로 곧장 코드 수정",
+          "good_pattern": "\"먼저 깊이 thinking 으로 가능한 접근 3가지 비교 후 선택해. 결정 이유를 한 단락으로 적고 시작.\"",
+          "linked_metrics": ["thinking_chars_total"]
+        },
+        {
+          "id": "planning_plan_mode",
+          "title": "큰 변경은 plan mode 로 사용자 승인 후 시작하라",
+          "body": "ExitPlanMode 는 단순 보고가 아니라 사용자에게 정렬할 시간을 주는 게이트입니다. 대규모 변경은 코드 작성 전 계획을 먼저 보여 받고, 승인된 계획만 실행하면 큰 폭의 정정을 막을 수 있습니다.",
+          "anti_pattern": "20개 파일 일괄 변경을 사용자 승인 없이 즉시 실행",
+          "good_pattern": "계획 작성 → ExitPlanMode → 사용자가 손보고 → 실행",
+          "linked_metrics": ["plan_tool_uses"]
+        }
+      ]
+    },
+    {
+      "id": "health",
+      "label": "건강도",
+      "summary": "정정 신호가 적고 user→assistant 비율이 적정한가",
+      "principles": [
+        {
+          "id": "health_low_correction",
+          "title": "정정 신호('아니야', '다시', 'no')가 잦으면 첫 프롬프트를 다시 써라",
+          "body": "정정은 진행이 아니라 후퇴입니다. 한 세션에 정정이 3회 이상이면 패치가 아니라 새 프롬프트가 답입니다. 현재 상태 + 원하는 종료 조건만 다시 한 번 깔끔히 적고 재개하세요.",
+          "anti_pattern": "방향 틀리는 응답마다 짧은 정정으로 5번 핑퐁",
+          "good_pattern": "정정 2회 후 \"잠깐, 처음부터 다시: 목표는 X, 지금까지 한 일은 Y, 지금부터 Z 해줘.\" 한 번에 리셋",
+          "linked_metrics": ["correction_rate", "correction_signals"]
+        },
+        {
+          "id": "health_turn_ratio",
+          "title": "user→assistant 비율 2-6 이 건강한 범위 — 너무 길어지면 분할하라",
+          "body": "한 user 프롬프트에 assistant 가 10턴 넘게 따라오면 컨텍스트가 흐려지고 사용자도 진행 상황을 잃습니다. 큰 작업은 자연스러운 체크포인트에서 끊어 user 가 검수할 기회를 주세요.",
+          "anti_pattern": "1 user → 30+ assistant 단방향 진행",
+          "good_pattern": "마일스톤마다 짧은 보고 후 다음 단계 합의",
+          "linked_metrics": ["assistant_turns", "user_turns"]
+        },
+        {
+          "id": "health_small_validation",
+          "title": "막히면 인간에게 묻기 전에 작은 단위 검증을 추가하라",
+          "body": "디버깅이 길어지는 건 보통 가설 검증이 너무 큰 단위에서 일어나기 때문입니다. 'print 한 줄', '단위 테스트 한 개', 'curl 한 번' 같은 microcheck 를 먼저 만들어 가설을 좁히면 정정 사이클이 짧아집니다.",
+          "anti_pattern": "전체 파이프라인을 다시 돌려보며 '왜 안 되지' 반복",
+          "good_pattern": "\"먼저 X 가 정말 None 인지 print 한 줄로 확인. 결과 보고 나서 그다음 결정.\"",
+          "linked_metrics": ["bash_fail_rate", "edit_string_not_found"]
+        }
+      ]
+    }
+  ],
+  "session_types": {
+    "one_shot": {
+      "label": "단발 질문",
+      "expectation": "짧고 빠르면 잘한 것. Plan/TaskCreate 없어도 정상이며, clarity·efficiency 만 본다.",
+      "fair_axes": ["clarity", "efficiency"]
+    },
+    "exploration": {
+      "label": "탐색형",
+      "expectation": "Read·Grep 이 많은 게 자연스럽다. economy(서브에이전트 활용)와 efficiency(병렬화) 가 핵심.",
+      "fair_axes": ["economy", "efficiency"]
+    },
+    "implementation": {
+      "label": "구현형",
+      "expectation": "TaskCreate·plan·extended thinking 활용 여부가 결정적. 모든 축이 골고루.",
+      "fair_axes": ["clarity", "efficiency", "economy", "planning", "health"]
+    },
+    "debugging": {
+      "label": "디버깅형",
+      "expectation": "정정 신호와 실패가 발생하는 게 자연스럽다. health 보다 economy·planning(가설 검증 단위) 으로 평가.",
+      "fair_axes": ["economy", "planning"]
+    },
+    "mixed": {
+      "label": "복합형",
+      "expectation": "여러 모드가 섞임. 종합 점수로 보되 어느 축이 약한지 살펴보는 용도.",
+      "fair_axes": ["clarity", "efficiency", "economy", "planning", "health"]
+    }
+  }
+}

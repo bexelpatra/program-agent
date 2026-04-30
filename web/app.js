@@ -647,8 +647,112 @@
     });
   }
 
+  // ---------- viewport-aware help tooltip ----------
+  function setupHelpTooltips() {
+    const tip = document.createElement('div');
+    tip.className = 'help-tooltip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+
+    let currentTrigger = null;
+    const MARGIN = 8;        // tooltip-trigger 간격
+    const VIEW_PAD = 8;      // 뷰포트 가장자리 여백
+
+    function position(trigger) {
+      const text = trigger.getAttribute('data-tip') || '';
+      tip.textContent = text;
+      // 우선 보이지 않게 측정만
+      tip.style.maxWidth = '';
+      tip.classList.remove('place-above', 'place-below');
+      tip.style.visibility = 'hidden';
+      tip.classList.add('visible');
+
+      const trect = trigger.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const ttRect = tip.getBoundingClientRect();
+      let tw = ttRect.width;
+      let th = ttRect.height;
+
+      // 위/아래 결정 — 위쪽 공간이 충분하면 위, 아니면 아래
+      const spaceAbove = trect.top;
+      const spaceBelow = vh - trect.bottom;
+      const placeAbove = spaceAbove >= th + MARGIN || spaceAbove >= spaceBelow;
+      let top;
+      if (placeAbove) {
+        top = trect.top - th - MARGIN;
+        tip.classList.add('place-above');
+      } else {
+        top = trect.bottom + MARGIN;
+        tip.classList.add('place-below');
+      }
+      // 위/아래 잘림 보정
+      if (top < VIEW_PAD) top = VIEW_PAD;
+      if (top + th > vh - VIEW_PAD) top = Math.max(VIEW_PAD, vh - th - VIEW_PAD);
+
+      // 좌우 — 트리거 중심에 맞추되, 뷰포트 안으로 클램프
+      const triggerCenterX = trect.left + trect.width / 2;
+      let left = triggerCenterX - tw / 2;
+      if (left < VIEW_PAD) left = VIEW_PAD;
+      if (left + tw > vw - VIEW_PAD) left = vw - tw - VIEW_PAD;
+
+      // 화살표 위치 — tooltip 좌측 기준 트리거 중심
+      const arrowLeft = Math.min(
+        Math.max(triggerCenterX - left, 12),
+        tw - 12,
+      );
+      tip.style.setProperty('--arrow-left', arrowLeft + 'px');
+
+      tip.style.top = Math.round(top) + 'px';
+      tip.style.left = Math.round(left) + 'px';
+      tip.style.visibility = '';
+    }
+
+    function show(trigger) {
+      if (currentTrigger === trigger) return;
+      currentTrigger = trigger;
+      position(trigger);
+    }
+    function hide(trigger) {
+      if (trigger && trigger !== currentTrigger) return;
+      currentTrigger = null;
+      tip.classList.remove('visible', 'place-above', 'place-below');
+    }
+
+    document.addEventListener('mouseover', (e) => {
+      const t = e.target.closest('.help');
+      if (t) show(t);
+    });
+    document.addEventListener('mouseout', (e) => {
+      const t = e.target.closest('.help');
+      if (!t) return;
+      // 다른 .help 로 이동한 경우는 mouseover 가 처리
+      const related = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.help');
+      if (related === t) return;
+      hide(t);
+    });
+    document.addEventListener('focusin', (e) => {
+      const t = e.target.closest('.help');
+      if (t) show(t);
+    });
+    document.addEventListener('focusout', (e) => {
+      const t = e.target.closest('.help');
+      if (t) hide(t);
+    });
+    window.addEventListener('scroll', () => {
+      if (currentTrigger) position(currentTrigger);
+    }, true);
+    window.addEventListener('resize', () => {
+      if (currentTrigger) position(currentTrigger);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && currentTrigger) hide(currentTrigger);
+    });
+  }
+
   async function init() {
     bindModalEvents();
+    setupHelpTooltips();
     try {
       const sessions = await fetchSessions();
       hideError();
