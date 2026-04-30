@@ -19,27 +19,36 @@
     debugging: '디버깅',
     review: '리뷰',
   };
+  function readCssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
   const COLORS = {
-    bg: '#0e1116',
-    card: '#161b22',
-    border: '#2a313c',
-    text: '#e6edf3',
-    muted: '#9da7b3',
-    accent: '#7aa2f7',
-    good: '#56d364',
-    warn: '#e3b341',
-    bad: '#f0883e',
+    bg: '', card: '', border: '', text: '', muted: '',
+    accent: '', good: '', warn: '', bad: '',
   };
+  function refreshColors() {
+    COLORS.bg = readCssVar('--bg', '#0e1116');
+    COLORS.card = readCssVar('--card', '#161b22');
+    COLORS.border = readCssVar('--border', '#2a313c');
+    COLORS.text = readCssVar('--text', '#e6edf3');
+    COLORS.muted = readCssVar('--muted', '#9da7b3');
+    COLORS.accent = readCssVar('--accent', '#7aa2f7');
+    COLORS.good = readCssVar('--good', '#56d364');
+    COLORS.warn = readCssVar('--warn', '#e3b341');
+    COLORS.bad = readCssVar('--bad', '#f0883e');
+    if (window.Chart) {
+      Chart.defaults.color = COLORS.muted;
+      Chart.defaults.borderColor = COLORS.border;
+      Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Noto Sans KR', sans-serif";
+    }
+  }
+  refreshColors();
+
   const TYPE_PALETTE = [
     '#7aa2f7', '#56d364', '#e3b341', '#f0883e',
     '#bc8cff', '#79c0ff', '#ff7b72', '#a5d6ff',
   ];
-
-  if (window.Chart) {
-    Chart.defaults.color = COLORS.muted;
-    Chart.defaults.borderColor = COLORS.border;
-    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Noto Sans KR', sans-serif";
-  }
 
   const state = {
     data: null,
@@ -681,8 +690,16 @@
   }
 
   // ---------- bootstrap ----------
+  function rerenderForTheme() {
+    refreshColors();
+    if (state.data) {
+      try { renderAll(state.data); } catch (e) { console.error('theme rerender failed', e); }
+    }
+  }
+
   async function init() {
     setupHelpTooltips();
+    document.addEventListener('themechange', rerenderForTheme);
     try {
       const data = await fetchGuide();
       hideError();

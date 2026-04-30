@@ -11,28 +11,40 @@
     planning: '계획성',
     health: '건강도',
   };
+  function readCssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  // 테마에 따라 갱신되는 색 팔레트. refreshColors() 가 자리를 in-place 로 갱신.
   const COLORS = {
-    bg: '#0e1116',
-    card: '#161b22',
-    border: '#2a313c',
-    text: '#e6edf3',
-    muted: '#9da7b3',
-    accent: '#7aa2f7',
-    good: '#56d364',
-    warn: '#e3b341',
-    bad: '#f0883e',
+    bg: '', card: '', border: '', text: '', muted: '',
+    accent: '', good: '', warn: '', bad: '',
   };
+
+  function refreshColors() {
+    COLORS.bg = readCssVar('--bg', '#0e1116');
+    COLORS.card = readCssVar('--card', '#161b22');
+    COLORS.border = readCssVar('--border', '#2a313c');
+    COLORS.text = readCssVar('--text', '#e6edf3');
+    COLORS.muted = readCssVar('--muted', '#9da7b3');
+    COLORS.accent = readCssVar('--accent', '#7aa2f7');
+    COLORS.good = readCssVar('--good', '#56d364');
+    COLORS.warn = readCssVar('--warn', '#e3b341');
+    COLORS.bad = readCssVar('--bad', '#f0883e');
+    if (window.Chart) {
+      Chart.defaults.color = COLORS.muted;
+      Chart.defaults.borderColor = COLORS.border;
+      Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Noto Sans KR', sans-serif";
+    }
+  }
+
+  refreshColors();
+
   const TOOL_PALETTE = [
     '#7aa2f7', '#56d364', '#e3b341', '#f0883e',
     '#bc8cff', '#79c0ff', '#ff7b72', '#a5d6ff',
   ];
-
-  // Chart.js global defaults (dark theme)
-  if (window.Chart) {
-    Chart.defaults.color = COLORS.muted;
-    Chart.defaults.borderColor = COLORS.border;
-    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Noto Sans KR', sans-serif";
-  }
 
   // ---------- state ----------
   const state = {
@@ -750,9 +762,22 @@
     });
   }
 
+  function rerenderForTheme() {
+    refreshColors();
+    if (!state.sessions.length) return;
+    try {
+      renderRadarChart(state.sessions);
+      renderTrendChart(state.sessions);
+      renderToolsChart(state.sessions);
+    } catch (e) {
+      console.error('theme rerender failed', e);
+    }
+  }
+
   async function init() {
     bindModalEvents();
     setupHelpTooltips();
+    document.addEventListener('themechange', rerenderForTheme);
     try {
       const sessions = await fetchSessions();
       hideError();

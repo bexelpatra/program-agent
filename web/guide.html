@@ -4,13 +4,28 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>사용 가이드 — Claude Coach</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('coach-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (_) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="theme.js" defer></script>
 </head>
 <body>
   <div id="error-banner" class="error-banner hidden" role="alert"></div>
 
   <header class="page-header">
+    <button type="button" class="theme-toggle" aria-label="라이트 모드로 전환">라이트 모드</button>
     <div class="header-title">
       <a href="/" class="guide-back">← 대시보드로 돌아가기</a>
       <h1>

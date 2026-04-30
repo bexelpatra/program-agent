@@ -1,14 +1,55 @@
-:root {
+:root,
+:root[data-theme="dark"] {
   --bg: #0e1116;
   --card: #161b22;
+  --card-alt: #1b212b;
   --border: #2a313c;
+  --chip-bg: #2a313c;
+  --row-border: #1f252e;
+  --row-hover: #232a35;
+  --tooltip-bg: #0a0d12;
   --text: #e6edf3;
+  --text-on-accent: #0e1116;
   --muted: #9da7b3;
   --accent: #7aa2f7;
   --good: #56d364;
   --warn: #e3b341;
   --bad: #f0883e;
+  --error-bg: #4a1d1d;
+  --error-bg-soft: #2a1816;
+  --error-text: #ffb4b4;
+  --error-border: #6a2929;
   --shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f6f8fa;
+  --card: #ffffff;
+  --card-alt: #f0f3f6;
+  --border: #d0d7de;
+  --chip-bg: #eaeef2;
+  --row-border: #e6ebf0;
+  --row-hover: #f0f3f6;
+  --tooltip-bg: #1f2328;
+  --text: #1f2328;
+  --text-on-accent: #ffffff;
+  --muted: #59636e;
+  --accent: #0969da;
+  --good: #1a7f37;
+  --warn: #9a6700;
+  --bad: #cf222e;
+  --error-bg: #ffebe9;
+  --error-bg-soft: #fff5f5;
+  --error-text: #82071e;
+  --error-border: #ffcecb;
+  --shadow: 0 4px 20px rgba(140, 149, 159, 0.15);
+  color-scheme: light;
+}
+
+/* light theme 에서 tooltip 안의 텍스트 가독성 */
+:root[data-theme="light"] .help-tooltip {
+  color: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -40,7 +81,7 @@ html, body {
   height: 16px;
   margin-left: 6px;
   border-radius: 50%;
-  background: #2a313c;
+  background: var(--chip-bg);
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -54,14 +95,14 @@ html, body {
 .help:hover,
 .help:focus {
   background: var(--accent);
-  color: #0e1116;
+  color: var(--text-on-accent);
   outline: none;
 }
 
 /* 동적으로 위치를 계산하는 단일 플로팅 툴팁 (app.js 가 표시 제어) */
 .help-tooltip {
   position: fixed;
-  background: #0a0d12;
+  background: var(--tooltip-bg);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -115,9 +156,9 @@ html, body {
 
 /* ---------- error banner ---------- */
 .error-banner {
-  background: #4a1d1d;
-  color: #ffb4b4;
-  border-bottom: 1px solid #6a2929;
+  background: var(--error-bg);
+  color: var(--error-text);
+  border-bottom: 1px solid var(--error-border);
   padding: 12px 24px;
   font-size: 14px;
 }
@@ -134,7 +175,7 @@ html, body {
   top: 24px;
   right: 32px;
   background: var(--accent);
-  color: #0e1116;
+  color: var(--text-on-accent);
   text-decoration: none;
   font-weight: 600;
   font-size: 13px;
@@ -146,8 +187,37 @@ html, body {
 
 .guide-link:hover { filter: brightness(1.1); transform: translateY(-1px); }
 
+.theme-toggle {
+  position: absolute;
+  top: 24px;
+  right: 32px;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  z-index: 5;
+}
+
+.theme-toggle:hover {
+  background: var(--card-alt);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 가이드 버튼이 있는 페이지: 테마 토글을 가이드 버튼 왼쪽으로 */
+.page-header:has(.guide-link) .theme-toggle { right: 154px; }
+
+/* guide 페이지에는 guide-link 가 없으니 우측 상단 그대로 */
+
 @media (max-width: 700px) {
   .guide-link { top: 16px; right: 16px; padding: 6px 10px; font-size: 12px; }
+  .theme-toggle { top: 16px; padding: 5px 9px; font-size: 11px; }
+  .page-header:has(.guide-link) .theme-toggle { right: 130px; }
 }
 
 .header-title h1 {
@@ -249,7 +319,7 @@ main {
 }
 
 .metric-card {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
@@ -275,7 +345,7 @@ main {
 }
 
 .tip-card {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-left: 3px solid var(--accent);
   border-radius: 6px;
@@ -329,13 +399,13 @@ main {
 }
 
 .sessions-table tbody tr {
-  border-bottom: 1px solid #1f252e;
+  border-bottom: 1px solid var(--row-border);
   cursor: pointer;
   transition: background 0.12s;
 }
 
 .sessions-table tbody tr:hover {
-  background: #1b212b;
+  background: var(--card-alt);
 }
 
 .sessions-table tbody td {
@@ -431,7 +501,7 @@ main {
   border-radius: 6px;
 }
 
-.modal-close:hover { background: #232a35; color: var(--text); }
+.modal-close:hover { background: var(--row-hover); color: var(--text); }
 
 .modal-body {
   padding: 20px 22px;
@@ -458,7 +528,7 @@ main {
 }
 
 .metric-detail-item {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
@@ -483,7 +553,7 @@ main {
 }
 
 .modal-chart-wrap {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
@@ -509,7 +579,7 @@ main {
 }
 
 .modal-tip {
-  background: #1b212b;
+  background: var(--card-alt);
   border-left: 3px solid var(--accent);
   border-radius: 6px;
   padding: 10px 14px;
@@ -604,7 +674,7 @@ main {
   padding: 6px 10px;
   border-radius: 999px;
   font-size: 12px;
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   color: var(--text);
 }
@@ -626,7 +696,7 @@ main {
 .axis-chip.bad  .axis-chip-label { color: inherit; opacity: 0.85; }
 
 .diagnosis-chart-wrap {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
@@ -681,7 +751,7 @@ main {
   padding: 3px 10px;
   border-radius: 999px;
   font-size: 12px;
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   color: var(--muted);
 }
@@ -726,7 +796,7 @@ main {
   margin-right: 6px;
   padding: 1px 6px;
   border-radius: 4px;
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
 }
 
@@ -739,7 +809,7 @@ main {
 }
 
 .code-block {
-  background: #0a0d12;
+  background: var(--tooltip-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -796,7 +866,7 @@ main {
 }
 
 .example-session {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px 14px;
@@ -818,7 +888,7 @@ main {
 
 .example-meta .em-score { color: var(--text); font-weight: 600; }
 .example-meta .em-type {
-  background: #0a0d12;
+  background: var(--tooltip-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0 6px;
@@ -835,7 +905,7 @@ main {
   border-left: 3px solid var(--accent);
   padding: 4px 10px;
   margin: 6px 0;
-  background: #0a0d12;
+  background: var(--tooltip-bg);
   border-radius: 0 6px 6px 0;
   font-size: 12.5px;
   color: var(--muted);
@@ -865,7 +935,7 @@ main {
 
 .coach-button {
   background: var(--accent);
-  color: #0e1116;
+  color: var(--text-on-accent);
   border: none;
   border-radius: 6px;
   padding: 8px 12px;
@@ -878,7 +948,7 @@ main {
 
 .coach-button:hover:not(:disabled) { filter: brightness(1.1); }
 .coach-button:disabled {
-  background: #2a313c;
+  background: var(--chip-bg);
   color: var(--muted);
   cursor: not-allowed;
 }
@@ -887,7 +957,7 @@ main {
   grid-column: 1 / -1;
   margin-top: 10px;
   padding: 12px 14px;
-  background: #0a0d12;
+  background: var(--tooltip-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
@@ -897,8 +967,8 @@ main {
 
 .coach-result.error {
   border-color: rgba(240, 136, 62, 0.55);
-  background: #2a1816;
-  color: #ffb4b4;
+  background: var(--error-bg-soft);
+  color: var(--error-text);
 }
 
 .coach-result h2 {
@@ -919,7 +989,7 @@ main {
 }
 .coach-result li { margin-bottom: 3px; }
 .coach-result code {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
@@ -927,7 +997,7 @@ main {
   font-size: 12px;
 }
 .coach-result pre {
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
@@ -987,7 +1057,7 @@ main {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #1b212b;
+  background: var(--card-alt);
   border: 1px solid var(--border);
   color: var(--muted);
 }

@@ -70,7 +70,7 @@ STATIC_TYPES = {
     ".ico": "image/x-icon",
 }
 
-STATIC_FILES = {"app.js", "style.css", "favicon.ico", "guide.html", "guide.js"}
+STATIC_FILES = {"app.js", "style.css", "favicon.ico", "guide.html", "guide.js", "theme.js"}
 
 PRINCIPLES_CACHE: dict | None = None
 PRINCIPLES_TEXT: str | None = None
