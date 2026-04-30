@@ -24,6 +24,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.core.db import SessionLocal
 from app.data.pipeline import backfill_active_assets
+from app.data.sources import get_source_for_market
 from app.data.sources.base import DataSource
 from app.data.sources.pykrx_source import PykrxSource
 from app.data.sources.yfinance_source import YfinanceSource
@@ -45,18 +46,19 @@ def _run_market_backfill(market: Market) -> None:
     최종 catch 한다 (APScheduler 자체도 잡 단위 격리는 하지만 이중 안전망).
     """
     logger.info("cron: starting backfill for market=%s", market)
-    sources_by_market: dict[str, DataSource] = {
-        "KR": PykrxSource(),
-        "US": YfinanceSource(),
-        "CRYPTO": YfinanceSource(),
-    }
-    if market not in sources_by_market:
-        logger.error("cron: unknown market=%s, skip", market)
-        return
-
+    # 라우팅 결정은 get_source_for_market 단일 진입점에 위임 (TASK-235).
     # 단일 시장만 라우팅 → backfill_active_assets 가 매칭되지 않는 자산은
     # REJECTED 처리. 시장별 독립 실행을 보장한다.
-    filtered_sources: dict[str, DataSource] = {market: sources_by_market[market]}
+    try:
+        source = get_source_for_market(
+            market,
+            yfinance=YfinanceSource(),
+            pykrx=PykrxSource(),
+        )
+    except ValueError:
+        logger.error("cron: unknown market=%s, skip", market)
+        return
+    filtered_sources: dict[str, DataSource] = {market: source}
 
     with SessionLocal() as session:
         try:

@@ -20,6 +20,7 @@ from app.data.sources import (
     TickerValidation,
     YfinanceFxSource,
     YfinanceSource,
+    get_source_for_market,
 )
 
 __all__ = [
@@ -41,4 +42,5 @@ __all__ = [
     "YfinanceSource",
     "YfinanceFxSource",
     "PykrxSource",
+    "get_source_for_market",
 ]

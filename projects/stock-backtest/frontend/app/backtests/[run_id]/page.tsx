@@ -24,13 +24,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
-import { TradesTable } from "@/components/backtest/TradesTable";
-import { MonthlyHeatmap } from "@/components/backtest/MonthlyHeatmap";
-import { MetricsTable } from "@/components/backtest/MetricsTable";
-import { EquityChart } from "@/components/backtest/EquityChart";
-import { DrawdownChart } from "@/components/backtest/DrawdownChart";
+import { BacktestResultView } from "@/components/backtest/BacktestResultView";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api/client";
@@ -209,9 +204,6 @@ export default function BacktestResultPage() {
     );
   }
 
-  const monthly = result.metrics?.monthly_returns ?? {};
-  const hasMonthly = Object.keys(monthly).length > 0;
-
   return (
     <main className="min-h-screen bg-gray-50 p-8">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -233,51 +225,12 @@ export default function BacktestResultPage() {
           {statusBadge}
         </header>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">자본 곡선</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setLogScale((v) => !v)}
-                aria-pressed={logScale}
-              >
-                {logScale ? "선형" : "로그"}
-              </Button>
-            </div>
-            <EquityChart points={result.equity_curve} logScale={logScale} />
-          </Card>
-          <Card className="p-4">
-            <h2 className="mb-3 text-lg font-semibold">낙폭 (Drawdown)</h2>
-            <DrawdownChart points={result.equity_curve} />
-          </Card>
-        </div>
-
-        {result.metrics ? (
-          <Card className="p-4">
-            <h2 className="mb-3 text-lg font-semibold">성과 지표</h2>
-            <MetricsTable metrics={result.metrics} />
-          </Card>
-        ) : (
-          <Card className="p-4 text-sm text-gray-500">
-            성과 지표를 계산하지 못했습니다 (체결된 거래가 없을 수 있음).
-          </Card>
-        )}
-
-        {hasMonthly ? (
-          <Card className="p-4">
-            <h2 className="mb-3 text-lg font-semibold">월별 수익률</h2>
-            <MonthlyHeatmap monthly={monthly} />
-          </Card>
-        ) : null}
-
-        <Card className="p-0">
-          <h2 className="border-b p-4 text-lg font-semibold">
-            거래 내역 ({result.trades.length}건)
-          </h2>
-          <TradesTable trades={result.trades} />
-        </Card>
+        <BacktestResultView
+          result={result}
+          logScale={logScale}
+          onLogScaleChange={setLogScale}
+          layout="full"
+        />
       </div>
     </main>
   );

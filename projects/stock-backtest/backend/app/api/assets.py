@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.health import COMMON_ERROR_RESPONSES
+from app.data.sources import get_source_for_market
 from app.data.sources.pykrx_source import PykrxSource
 from app.data.sources.yfinance_source import YfinanceSource
 from app.dependencies import get_asset_repo, get_db
@@ -80,10 +81,16 @@ class _RoutingValidator:
 
     market 별로 yfinance / pykrx 를 선택하고, source 의 TickerValidation 을
     domain 의 ValidationOutcome 으로 변환한다 (어댑터는 source 타입을 누설하지 않음).
+
+    라우팅 결정은 `app.data.sources.get_source_for_market` 단일 진입점에 위임 (TASK-235).
     """
 
     def __init__(self, market: str):
-        self._source = PykrxSource() if market == "KR" else YfinanceSource()
+        self._source = get_source_for_market(
+            market,
+            yfinance=YfinanceSource(),
+            pykrx=PykrxSource(),
+        )
 
     def validate_ticker(self, symbol: str) -> ValidationOutcome:
         result = self._source.validate_ticker(symbol)

@@ -2,6 +2,16 @@
 
 V3 Phase 1 MVP 완료 태스크 append-only 로그.
 
+### Phase 2 리팩토링 (TASK-235/237 DONE) - 2026-04-30T15:50
+
+2 태스크 병렬 (backend + frontend 영역 분리). Reviewer 사전 검증 NEEDS_REVISION (TASK-237 라인 시프트 8줄 — Phase 1 의 TASK-238 import 정리 영향) → Manager 정정 후 Coder 호출.
+
+- **TASK-235** (source 라우팅 단일화): `data/sources/__init__.py` 에 `get_source_for_market(market, *, yfinance, pykrx) -> DataSource` factory. `api/assets.py` `_RoutingValidator` + `scheduler/cron_jobs.py` `sources_by_market` dict 양쪽 호출 통합. 신규 시장 추가 시 한 곳만 수정.
+- **TASK-237** (BacktestResultView 추출): 신규 컴포넌트 (133줄) + `layout: "compact" | "full"` prop. `new/page.tsx` 786→712줄, `[run_id]/page.tsx` 284→237줄. `__tests__/BacktestResultView.test.tsx` 4 tests + 2 snapshots. 시각화 5개 컴포넌트 import 두 페이지에서 0건 (단일 진입점화).
+  - 부수: `vitest.config.ts` 에 `esbuild.jsx='automatic'` 추가 (`.tsx` 테스트 도입을 위한 환경 설정).
+- **통합 회귀**: backend 123 passed (Phase 1 baseline 일치, 회귀 0). frontend tsc 0 + build PASS + vitest 10/10.
+- **병렬 충돌**: 0건.
+
 ### Phase 1 리팩토링 일괄 (TASK-230/231/232/233/234/236/238 DONE) - 2026-04-30T15:00
 
 7 태스크 병렬 실행 (backend 6 + frontend 1). Reviewer 사전 검증 R1 NEEDS_REVISION → R2 PASS 거쳐 Coder 동시 호출.

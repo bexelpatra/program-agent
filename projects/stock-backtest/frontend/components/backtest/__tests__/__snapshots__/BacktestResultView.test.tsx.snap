@@ -1,0 +1,167 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`BacktestResultView > layout='compact' 가 5개 시각화 슬롯 모두를 단일 컬럼 stack 으로 렌더한다 1`] = `
+<div
+  class="space-y-6"
+>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+  >
+    <div
+      class="mb-3 flex items-center justify-between"
+    >
+      <h2
+        class="text-lg font-semibold"
+      >
+        자본 곡선
+      </h2>
+      <button
+        aria-pressed="false"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-gray-100 text-gray-900 h-9 px-3"
+        type="button"
+      >
+        로그
+      </button>
+    </div>
+    <div
+      data-logscale="false"
+      data-testid="equity-chart"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+  >
+    <h2
+      class="mb-3 text-lg font-semibold"
+    >
+      낙폭 (Drawdown)
+    </h2>
+    <div
+      data-testid="drawdown-chart"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+  >
+    <h2
+      class="mb-3 text-lg font-semibold"
+    >
+      성과 지표
+    </h2>
+    <div
+      data-testid="metrics-table"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+  >
+    <h2
+      class="mb-3 text-lg font-semibold"
+    >
+      월별 수익률
+    </h2>
+    <div
+      data-testid="monthly-heatmap"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-0"
+  >
+    <h2
+      class="border-b p-4 text-lg font-semibold"
+    >
+      거래 내역 (
+      1
+      건)
+    </h2>
+    <div
+      data-testid="trades-table"
+    />
+  </div>
+</div>
+`;
+
+exports[`BacktestResultView > layout='full' 이 자본곡선/낙폭만 md:grid-cols-2 로 병치한다 1`] = `
+<div
+  class="space-y-6"
+>
+  <div
+    class="grid gap-6 md:grid-cols-2"
+  >
+    <div
+      class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+    >
+      <div
+        class="mb-3 flex items-center justify-between"
+      >
+        <h2
+          class="text-lg font-semibold"
+        >
+          자본 곡선
+        </h2>
+        <button
+          aria-pressed="false"
+          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-gray-100 text-gray-900 h-9 px-3"
+          type="button"
+        >
+          로그
+        </button>
+      </div>
+      <div
+        data-logscale="false"
+        data-testid="equity-chart"
+      />
+    </div>
+    <div
+      class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+    >
+      <h2
+        class="mb-3 text-lg font-semibold"
+      >
+        낙폭 (Drawdown)
+      </h2>
+      <div
+        data-testid="drawdown-chart"
+      />
+    </div>
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+  >
+    <h2
+      class="mb-3 text-lg font-semibold"
+    >
+      성과 지표
+    </h2>
+    <div
+      data-testid="metrics-table"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-4"
+  >
+    <h2
+      class="mb-3 text-lg font-semibold"
+    >
+      월별 수익률
+    </h2>
+    <div
+      data-testid="monthly-heatmap"
+    />
+  </div>
+  <div
+    class="rounded-lg border border-gray-200 bg-white text-gray-900 shadow-sm p-0"
+  >
+    <h2
+      class="border-b p-4 text-lg font-semibold"
+    >
+      거래 내역 (
+      1
+      건)
+    </h2>
+    <div
+      data-testid="trades-table"
+    />
+  </div>
+</div>
+`;

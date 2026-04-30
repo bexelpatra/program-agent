@@ -44,14 +44,10 @@ import { useToast } from "@/components/ui/toast";
 import { ko } from "@/lib/i18n/ko";
 
 import { AssetWeightMap } from "@/components/backtest/AssetWeightMap";
-import { DrawdownChart } from "@/components/backtest/DrawdownChart";
-import { EquityChart } from "@/components/backtest/EquityChart";
+import { BacktestResultView } from "@/components/backtest/BacktestResultView";
 import { FilterConfigBuilder } from "@/components/backtest/FilterConfigBuilder";
-import { MetricsTable } from "@/components/backtest/MetricsTable";
-import { MonthlyHeatmap } from "@/components/backtest/MonthlyHeatmap";
 import { ProgressPanel } from "@/components/backtest/ProgressPanel";
 import { StrategyParamsForm } from "@/components/backtest/StrategyParamsForm";
-import { TradesTable } from "@/components/backtest/TradesTable";
 import {
   UniverseSelector,
   type UniverseAsset,
@@ -692,14 +688,19 @@ export default function NewBacktestPage() {
                   }}
                 />
 
-                {polling.run?.status === "done" && (
-                  <BacktestResultPanel
-                    result={result}
-                    loading={resultLoading}
-                    logScale={logScale}
-                    onToggleLogScale={() => setLogScale((v) => !v)}
-                  />
-                )}
+                {polling.run?.status === "done" &&
+                  (resultLoading || !result ? (
+                    <Card className="p-6 text-center text-sm text-gray-500">
+                      {resultLoading ? "결과 불러오는 중..." : "결과를 준비 중입니다."}
+                    </Card>
+                  ) : (
+                    <BacktestResultView
+                      result={result}
+                      logScale={logScale}
+                      onLogScaleChange={setLogScale}
+                      layout="compact"
+                    />
+                  ))}
               </>
             )}
           </div>
@@ -709,78 +710,3 @@ export default function NewBacktestPage() {
   );
 }
 
-// ─── 인플레이스 결과 패널 ──────────────────────────────────────────────
-//
-// `/backtests/[run_id]` 의 결과 화면과 동일한 시각화 컴포넌트들을 그대로
-// 사용한다. 이력 화면 (별도 라우트) 은 회귀 0 — 이 패널은 신규 분리이며
-// 기존 라우트에는 영향 없음.
-function BacktestResultPanel({
-  result,
-  loading,
-  logScale,
-  onToggleLogScale,
-}: {
-  result: BacktestResult | null;
-  loading: boolean;
-  logScale: boolean;
-  onToggleLogScale: () => void;
-}) {
-  if (loading || !result) {
-    return (
-      <Card className="p-6 text-center text-sm text-gray-500">
-        {loading ? "결과 불러오는 중..." : "결과를 준비 중입니다."}
-      </Card>
-    );
-  }
-  const monthly = result.metrics?.monthly_returns ?? {};
-  const hasMonthly = Object.keys(monthly).length > 0;
-
-  return (
-    <div className="space-y-6">
-      <Card className="p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">자본 곡선</h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleLogScale}
-            aria-pressed={logScale}
-          >
-            {logScale ? "선형" : "로그"}
-          </Button>
-        </div>
-        <EquityChart points={result.equity_curve} logScale={logScale} />
-      </Card>
-
-      <Card className="p-4">
-        <h2 className="mb-3 text-lg font-semibold">낙폭 (Drawdown)</h2>
-        <DrawdownChart points={result.equity_curve} />
-      </Card>
-
-      {result.metrics ? (
-        <Card className="p-4">
-          <h2 className="mb-3 text-lg font-semibold">성과 지표</h2>
-          <MetricsTable metrics={result.metrics} />
-        </Card>
-      ) : (
-        <Card className="p-4 text-sm text-gray-500">
-          성과 지표를 계산하지 못했습니다 (체결된 거래가 없을 수 있음).
-        </Card>
-      )}
-
-      {hasMonthly ? (
-        <Card className="p-4">
-          <h2 className="mb-3 text-lg font-semibold">월별 수익률</h2>
-          <MonthlyHeatmap monthly={monthly} />
-        </Card>
-      ) : null}
-
-      <Card className="p-0">
-        <h2 className="border-b p-4 text-lg font-semibold">
-          거래 내역 ({result.trades.length}건)
-        </h2>
-        <TradesTable trades={result.trades} />
-      </Card>
-    </div>
-  );
-}
