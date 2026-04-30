@@ -34,6 +34,21 @@ def _resolve_calendar_name(market: str) -> str | None:
     return _MARKET_CALENDARS[market]
 
 
+def get_calendar_name(market: str) -> str | None:
+    """시장 코드 → exchange_calendars 캘린더명 (graceful 조회).
+
+    `_resolve_calendar_name` 과 달리 unknown market 일 때 `ValueError` 를 발생시키지 않고
+    `None` 을 반환한다. 호출자(예: data/pipeline.py 의 `_trading_days`) 가 미지원 시장을
+    "거래일 없음" 으로 graceful 처리할 수 있게 하기 위함이다.
+
+    Returns:
+        - 알려진 market 의 캘린더명 (예: "XKRX", "XNYS")
+        - CRYPTO 처럼 캘린더 불필요 시: None
+        - unknown market: None (raise 하지 않음)
+    """
+    return _MARKET_CALENDARS.get(market)
+
+
 def is_trading_day(market: str, target: date) -> bool:
     """주어진 날짜가 해당 시장의 거래일인지.
 

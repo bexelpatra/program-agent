@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 import traceback
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -82,14 +82,18 @@ def _resolve_symbol_keys_to_asset_ids(params: dict[str, Any]) -> dict[str, Any]:
         return params
 
     weights = params["weights"]
-    needs_resolve = [k for k in weights.keys() if isinstance(k, str) and not k.lstrip("-").isdigit()]
+    needs_resolve = [
+        k for k in weights.keys() if isinstance(k, str) and not k.lstrip("-").isdigit()
+    ]
     if not needs_resolve:
         return params
 
     with SessionLocal() as session:
-        rows = session.execute(
-            select(Asset).where(Asset.symbol.in_(needs_resolve))
-        ).scalars().all()
+        rows = (
+            session.execute(select(Asset).where(Asset.symbol.in_(needs_resolve)))
+            .scalars()
+            .all()
+        )
         symbol_to_id: dict[str, int] = {}
         for r in rows:
             # active 우선, 같은 symbol 이 여러 market 이면 첫 일치
@@ -133,9 +137,7 @@ def build_strategy_from_config(strategy_config: dict[str, Any]) -> Strategy:
     for fc in strategy_config.get("filter_configs") or []:
         fname = fc["name"]
         if fname not in _FILTERS:
-            raise ValueError(
-                f"unknown filter: {fname} (allowed: {list(_FILTERS)})"
-            )
+            raise ValueError(f"unknown filter: {fname} (allowed: {list(_FILTERS)})")
         FilterCls, FilterParams = _FILTERS[fname]
         signal_filters.append(FilterCls(FilterParams(**(fc.get("params") or {}))))
 
@@ -199,84 +201,107 @@ def _record_failure(
         session.commit()
 
 
+def _build_equity_rows(
+    equity_curve: list[Any],
+) -> list[tuple[datetime, Decimal, Decimal, Decimal]]:
+    """equity_curve → backtest_equity insert rows (peak 추적 + drawdown 즉석 계산).
+
+    equity_curve 는 BacktestEquityPoint(time=date, equity, cash_total_in_base) 의 list.
+    drawdown 은 누적 peak 대비 비율 (음수 또는 0). models.BacktestEquity.time 은
+    DateTime(timezone=True) 라 date → datetime(UTC midnight) 변환.
+    """
+    rows: list[tuple[datetime, Decimal, Decimal, Decimal]] = []
+    peak = Decimal("0")
+    for point in equity_curve:
+        equity_value = Decimal(point.equity)
+        if equity_value > peak:
+            peak = equity_value
+        drawdown = (
+            (equity_value / peak - Decimal("1"))
+            if peak > Decimal("0")
+            else Decimal("0")
+        )
+        time_dt = datetime.combine(point.time, datetime.min.time(), tzinfo=timezone.utc)
+        rows.append(
+            (time_dt, equity_value, Decimal(point.cash_total_in_base), drawdown)
+        )
+    return rows
+
+
+def _build_trade_dicts(fills: list[Any]) -> list[dict[str, Any]]:
+    """fills → backtest_trades insert dicts.
+
+    TradeFill.settlement_date (모델 A 의 D+1 체결일) → backtest_trades.time (UTC midnight).
+    TASK-212 (2026-04-30) 회귀: 이전에는 fill 에 time 필드 없어 datetime.now() fallback
+    이 적용되어 모든 trades 가 백테스트 실행 시각으로 기록되는 버그가 있었음.
+
+    V3 Q8 재결정 (2026-04-29): qty_filled 는 Decimal — 정수 자산은 Decimal(int),
+    CRYPTO 는 8자리 소수. backtest_trades.qty 컬럼이 0004 마이그레이션으로 Numeric(20,8)
+    이라 그대로 적재 가능.
+    """
+    dicts: list[dict[str, Any]] = []
+    for fill in fills:
+        qty_value = (
+            fill.qty_filled
+            if isinstance(fill.qty_filled, Decimal)
+            else Decimal(fill.qty_filled)
+        )
+        trade_time = datetime.combine(
+            fill.settlement_date, datetime.min.time(), tzinfo=timezone.utc
+        )
+        dicts.append(
+            {
+                "time": trade_time,
+                "asset_id": fill.asset_id,
+                "side": fill.side,
+                "qty": qty_value,
+                "price": Decimal(fill.price),
+                "commission": Decimal(fill.commission),
+                "currency": fill.currency,
+            }
+        )
+    return dicts
+
+
+def _compute_and_flatten_metrics(equity_curve: list[Any]) -> dict[str, float]:
+    """equity_curve → backtest_metrics insert dict (flat name → value).
+
+    annual/monthly 는 별도 metric_name pattern (annual_return_{YYYY} / monthly_return_{YYYY-MM})
+    으로 적재해 향후 단순 query 로 분리 가능.
+    """
+    equity_series = [(point.time, Decimal(point.equity)) for point in equity_curve]
+    metrics = compute_metrics(equity_series)
+    flat: dict[str, float] = {
+        "cagr": metrics.cagr,
+        "mdd": metrics.mdd,
+        "sharpe": metrics.sharpe,
+        "sortino": metrics.sortino,
+        "calmar": metrics.calmar,
+        "win_rate": metrics.win_rate,
+    }
+    for year, ret in metrics.annual_returns.items():
+        flat[f"annual_return_{year}"] = ret
+    for ym, ret in metrics.monthly_returns.items():
+        flat[f"monthly_return_{ym}"] = ret
+    return flat
+
+
 def _persist_results(
     run_id: int,
     result: Any,
     base_currency: str,
 ) -> None:
     """엔진 결과 → equity/trades/metrics 적재 + status='done|cancelled' 마무리."""
+    equity_rows = _build_equity_rows(result.equity_curve)
+    trade_dicts = _build_trade_dicts(result.fills)
+    flat_metrics = _compute_and_flatten_metrics(result.equity_curve)
+    final_status = "cancelled" if result.aborted else "done"
+
     with SessionLocal() as session:
         repo = BacktestRepository(session)
-
-        # equity_curve: BacktestEquityPoint(time=date, equity, cash_total_in_base).
-        # drawdown 은 본 단계에서 즉석 계산 (peak 추적). models.BacktestEquity.time 은
-        # DateTime(timezone=True) 라 date → datetime(UTC midnight) 변환.
-        equity_rows: list[tuple[datetime, Decimal, Decimal, Decimal]] = []
-        peak = Decimal("0")
-        for point in result.equity_curve:
-            equity_value = Decimal(point.equity)
-            if equity_value > peak:
-                peak = equity_value
-            drawdown = (
-                (equity_value / peak - Decimal("1")) if peak > Decimal("0") else Decimal("0")
-            )
-            time_dt = datetime.combine(point.time, datetime.min.time(), tzinfo=timezone.utc)
-            equity_rows.append(
-                (time_dt, equity_value, Decimal(point.cash_total_in_base), drawdown)
-            )
         repo.insert_equity_points(run_id, equity_rows)
-
-        # trades: TradeFill.settlement_date (모델 A 의 D+1 체결일) 를 backtest_trades.time
-        # 에 적재. UTC midnight 으로 환산 (DateTime(timezone=True) 컬럼).
-        # TASK-212 (2026-04-30): 이전에는 fill 에 time 필드 없어 datetime.now() fallback
-        # 이 적용되어 모든 trades 가 백테스트 실행 시각으로 기록되는 버그가 있었음.
-        trade_dicts: list[dict[str, Any]] = []
-        for fill in result.fills:
-            # V3 Q8 재결정 (2026-04-29): qty_filled 는 Decimal — 정수 자산은
-            # Decimal(int), CRYPTO 는 8자리 소수. backtest_trades.qty 컬럼이
-            # 0004 마이그레이션으로 Numeric(20,8) 이라 그대로 적재 가능.
-            qty_value = (
-                fill.qty_filled
-                if isinstance(fill.qty_filled, Decimal)
-                else Decimal(fill.qty_filled)
-            )
-            trade_time = datetime.combine(
-                fill.settlement_date, datetime.min.time(), tzinfo=timezone.utc
-            )
-            trade_dicts.append(
-                {
-                    "time": trade_time,
-                    "asset_id": fill.asset_id,
-                    "side": fill.side,
-                    "qty": qty_value,
-                    "price": Decimal(fill.price),
-                    "commission": Decimal(fill.commission),
-                    "currency": fill.currency,
-                }
-            )
         repo.insert_trades(run_id, trade_dicts)
-
-        # metrics: equity 시계열에서 계산. annual/monthly 는 별도 metric_name pattern 으로
-        # 적재해 향후 단순 query 로 분리 가능 (annual_return_2024 / monthly_return_2024-01).
-        equity_series_for_metrics = [
-            (point.time, Decimal(point.equity)) for point in result.equity_curve
-        ]
-        metrics = compute_metrics(equity_series_for_metrics)
-        flat_metrics: dict[str, float] = {
-            "cagr": metrics.cagr,
-            "mdd": metrics.mdd,
-            "sharpe": metrics.sharpe,
-            "sortino": metrics.sortino,
-            "calmar": metrics.calmar,
-            "win_rate": metrics.win_rate,
-        }
-        for year, ret in metrics.annual_returns.items():
-            flat_metrics[f"annual_return_{year}"] = ret
-        for ym, ret in metrics.monthly_returns.items():
-            flat_metrics[f"monthly_return_{ym}"] = ret
         repo.insert_metrics(run_id, flat_metrics)
-
-        final_status = "cancelled" if result.aborted else "done"
         repo.update_status(
             run_id,
             status=final_status,
@@ -323,7 +348,9 @@ def execute_backtest_job(run_id: int) -> None:
             session.commit()
 
             stage = "build_strategy"
-            strategy = build_strategy_from_config(run.params.get("strategy", run.params))
+            strategy = build_strategy_from_config(
+                run.params.get("strategy", run.params)
+            )
 
             stage = "build_context"
             initial_cash_raw = run.params.get("initial_cash") or {"KRW": 10_000_000}
@@ -334,14 +361,16 @@ def execute_backtest_job(run_id: int) -> None:
             universe_ids: list[int] = list(run.universe or [])
 
             stage = "load_market_data"
-            prices_aligned, universe_market_meta, fx_rates_to_base = (
-                build_backtest_context(
-                    session=session,
-                    asset_ids=universe_ids,
-                    base_currency=run.base_currency,
-                    period_start=run.period_start,
-                    period_end=run.period_end,
-                )
+            (
+                prices_aligned,
+                universe_market_meta,
+                fx_rates_to_base,
+            ) = build_backtest_context(
+                session=session,
+                asset_ids=universe_ids,
+                base_currency=run.base_currency,
+                period_start=run.period_start,
+                period_end=run.period_end,
             )
 
             stage = "build_context"
@@ -370,9 +399,7 @@ def execute_backtest_job(run_id: int) -> None:
                     exc,
                     trace_id,
                 )
-                _record_failure(
-                    run_id, stage="run_engine", exc=exc, trace_id=trace_id
-                )
+                _record_failure(run_id, stage="run_engine", exc=exc, trace_id=trace_id)
                 return
 
             stage = "persist_results"

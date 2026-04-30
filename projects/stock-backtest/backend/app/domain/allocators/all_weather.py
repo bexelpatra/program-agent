@@ -23,6 +23,7 @@ from typing import ClassVar, Literal
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
+from ._validation import validate_weight_dict
 from .base import AllocatorBase, normalize_weights
 
 Category = Literal["equity", "long_bond", "intermediate_bond", "gold", "commodity"]
@@ -60,16 +61,9 @@ class AllWeatherParams(BaseModel):
     @field_validator("category_weights")
     @classmethod
     def _validate_weights(cls, v: dict[Category, float]) -> dict[Category, float]:
-        if any(w < 0 for w in v.values()):
-            raise ValueError("category weights must be non-negative")
-        total = sum(v.values())
-        if total <= 0:
-            raise ValueError("category weights total must be positive")
-        if abs(total - 1.0) > 0.05:
-            raise ValueError(
-                f"category_weights total {total} must be close to 1.0 (within 5%)"
-            )
-        return v
+        # `Field(default_factory=...)` 가 빈 dict 진입을 막아주므로 allow_empty=True.
+        # 비중 검증은 fixed_weight / ma_signal 과 동일 정책.
+        return validate_weight_dict(v, name="category_weights", allow_empty=True)
 
     @field_validator("asset_categories")
     @classmethod

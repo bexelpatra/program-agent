@@ -28,20 +28,10 @@ import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-
-interface JsonSchemaProperty {
-  type?: string;
-  title?: string;
-  description?: string;
-  default?: unknown;
-  enum?: unknown[];
-}
-
-interface JsonSchemaObject {
-  type?: string;
-  properties?: Record<string, JsonSchemaProperty>;
-  required?: string[];
-}
+import type {
+  JsonSchemaObject,
+  JsonSchemaProperty,
+} from "@/lib/api/types";
 
 export interface ComplexFieldRendererArgs {
   key: string;

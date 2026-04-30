@@ -128,7 +128,7 @@ def list_assets(
     offset: int = Query(0, ge=0),
     session: Session = Depends(get_db),
 ) -> PaginatedResponse[AssetRead]:
-    """active=true 인 자산만 반환. 정확한 total 카운트는 향후 별도 쿼리로 보강."""
+    """active=true 인 자산만 반환. total 은 동일 필터 적용한 별도 count 쿼리 (TASK-234)."""
 
     repo = get_asset_repo(session)
     items = repo.search(
@@ -138,10 +138,11 @@ def list_assets(
         limit=limit,
         offset=offset,
     )
+    total = repo.count(q=q, market=market, asset_type=asset_type)
     page = (offset // limit) + 1 if limit > 0 else 1
     return PaginatedResponse(
         items=[_to_read(a) for a in items],
-        total=len(items),
+        total=total,
         page=page,
         page_size=limit,
     )

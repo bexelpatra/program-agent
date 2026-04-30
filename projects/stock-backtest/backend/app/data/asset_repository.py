@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import cast
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -76,6 +76,34 @@ class SqlAssetRepository:
             stmt = stmt.where(AssetModel.asset_type == asset_type)
         stmt = stmt.order_by(AssetModel.name).limit(limit).offset(offset)
         return [_to_entity(m) for m in self._session.execute(stmt).scalars().all()]
+
+    def count(
+        self,
+        q: str | None = None,
+        market: Market | None = None,
+        asset_type: str | None = None,
+    ) -> int:
+        """`search(...)` 와 동일 필터를 적용한 row 수.
+
+        TASK-234: PaginatedResponse.total 정확화 — limit/offset 를 적용하지 않고
+        조건에 맞는 전체 row 수를 반환한다 (페이지 수 산정 용도).
+        search 와 필터 조건 동치성을 유지하기 위해 동일 분기를 그대로 복제했다.
+        """
+        stmt = (
+            select(func.count())
+            .select_from(AssetModel)
+            .where(AssetModel.active.is_(True))
+        )
+        if q:
+            pattern = f"{q}%"
+            stmt = stmt.where(
+                or_(AssetModel.symbol.ilike(pattern), AssetModel.name.ilike(pattern))
+            )
+        if market:
+            stmt = stmt.where(AssetModel.market == market)
+        if asset_type:
+            stmt = stmt.where(AssetModel.asset_type == asset_type)
+        return int(self._session.execute(stmt).scalar_one())
 
     def list_active(self) -> list[AssetEntity]:
         stmt = select(AssetModel).where(AssetModel.active.is_(True))

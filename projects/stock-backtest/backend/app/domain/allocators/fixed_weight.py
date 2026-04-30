@@ -17,13 +17,14 @@ from typing import ClassVar
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
+from ._validation import validate_weight_dict
 from .base import AllocatorBase, normalize_weights
 
 
 class FixedWeightParams(BaseModel):
     """사용자가 UI 폼에서 입력. asset_id 별 비중 dict.
 
-    Validation:
+    Validation (allocators/_validation.py:validate_weight_dict 위임):
         - 빈 dict 금지
         - 음수 비중 금지
         - 합이 1.0 ± 5% 안 (사용자 입력 편의: 60/40 같은 정수 입력 허용,
@@ -38,18 +39,7 @@ class FixedWeightParams(BaseModel):
     @field_validator("weights")
     @classmethod
     def _validate_weights(cls, v: dict[int, float]) -> dict[int, float]:
-        if not v:
-            raise ValueError("weights must not be empty")
-        if any(w < 0 for w in v.values()):
-            raise ValueError("weights must be non-negative")
-        total = sum(v.values())
-        if total <= 0:
-            raise ValueError("weights total must be positive")
-        if abs(total - 1.0) > 0.05:
-            raise ValueError(
-                f"weights total {total} must be close to 1.0 (within 5%)"
-            )
-        return v
+        return validate_weight_dict(v, name="weights")
 
 
 class FixedWeight(AllocatorBase[FixedWeightParams]):

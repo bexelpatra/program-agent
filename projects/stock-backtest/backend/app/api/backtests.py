@@ -281,10 +281,11 @@ def list_backtests(
 ) -> PaginatedResponse[BacktestRunSchema]:
     repo = BacktestRepository(session)
     runs = repo.list_runs(limit=limit, offset=offset)
+    total = repo.count_runs()
     page = (offset // limit) + 1 if limit > 0 else 1
     return PaginatedResponse(
         items=[_to_run_schema(r) for r in runs],
-        total=len(runs),
+        total=total,
         page=page,
         page_size=limit,
     )

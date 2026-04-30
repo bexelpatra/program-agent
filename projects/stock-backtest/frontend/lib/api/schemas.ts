@@ -9,6 +9,27 @@
  */
 import { z } from "zod";
 
+// ─── JSON Schema descriptors (pydantic params_schema) ─────────────────
+//
+// Mirrors the structural shape `model_json_schema()` returns. Only the
+// fields the UI consumes are validated; extra keys (e.g. `examples`,
+// `format`, `pattern`) are stripped by Zod's default object behaviour
+// but no runtime error. Backed by the TS interfaces in `./types.ts`.
+
+const JsonSchemaPropertySchema = z.object({
+  type: z.string().optional(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  default: z.unknown().optional(),
+  enum: z.array(z.unknown()).optional(),
+});
+
+const JsonSchemaObjectSchema = z.object({
+  type: z.string().optional(),
+  properties: z.record(JsonSchemaPropertySchema).optional(),
+  required: z.array(z.string()).optional(),
+});
+
 // ─── Enums ─────────────────────────────────────────────────────────────
 
 export const MarketEnum = z.enum(["KR", "US", "CRYPTO"]);
@@ -32,7 +53,9 @@ export const AssetSchema = z.object({
   asset_type: AssetTypeEnum,
   currency: z.string(),
   name: z.string(),
-  meta: z.record(z.any()).default({}),
+  // `optional()` (not `.default({})`) keeps Zod input/output variance
+  // aligned for `z.array(AssetSchema)` consumers — see TASK-238.
+  meta: z.record(z.unknown()).optional(),
   active: z.boolean(),
   start_date: z.string().nullable().optional(),
   last_ingested_at: z.string().nullable().optional(),
@@ -45,7 +68,7 @@ export const AssetCreateSchema = z.object({
   asset_type: AssetTypeEnum,
   currency: z.string().min(2).max(8),
   name: z.string().min(1).max(128),
-  meta: z.record(z.any()).default({}),
+  meta: z.record(z.unknown()).optional(),
 });
 export type AssetCreate = z.infer<typeof AssetCreateSchema>;
 
@@ -93,7 +116,10 @@ export type OhlcvList = z.infer<typeof OhlcvListSchema>;
 export const StrategyDescriptorSchema = z.object({
   name: z.string(),
   type: z.enum(["allocator", "filter"]),
-  params_schema: z.record(z.any()),
+  // Structural JSON Schema (object with `properties`/`required`) — the
+  // UI consumes `properties[k].type/title/description/default/enum` to
+  // render param fields. See `JsonSchemaObject` in `./types.ts`.
+  params_schema: JsonSchemaObjectSchema,
   description: z.string().nullable().optional(),
 });
 export type StrategyDescriptor = z.infer<typeof StrategyDescriptorSchema>;
@@ -125,7 +151,9 @@ export const ErrorResponseSchema = z.object({
     stage: z.string(),
     type: z.string(),
     message: z.string(),
-    request_ctx: z.record(z.any()).default({}),
+    // `client.ts` ApiError requires a non-undefined Record; keep the
+    // default to preserve that contract while dropping `any`.
+    request_ctx: z.record(z.unknown()).default({}),
     trace_id: z.string(),
   }),
 });
@@ -166,7 +194,7 @@ export type RebalanceSchedule = z.infer<typeof RebalanceScheduleEnum>;
  */
 export const FilterConfigSchema = z.object({
   name: z.string(),
-  params: z.record(z.any()),
+  params: z.record(z.unknown()),
 });
 export type FilterConfig = z.infer<typeof FilterConfigSchema>;
 
@@ -176,12 +204,12 @@ export type FilterConfig = z.infer<typeof FilterConfigSchema>;
  * `allocator_params` / `filter_configs[].params` are loose dicts because
  * each allocator/filter has its own pydantic schema validated on the
  * server (StrategyDescriptor.params_schema → form). We keep them as
- * `z.record(z.any())` here so the runtime shape exactly mirrors what the
- * server accepts; per-strategy validation lives in the form widget.
+ * `z.record(z.unknown())` here so the runtime shape exactly mirrors what
+ * the server accepts; per-strategy validation lives in the form widget.
  */
 export const StrategyConfigSchema = z.object({
   allocator_name: z.string(),
-  allocator_params: z.record(z.any()),
+  allocator_params: z.record(z.unknown()),
   filter_configs: z.array(FilterConfigSchema).default([]),
   rebalance_schedule: RebalanceScheduleEnum.default("monthly"),
 });
@@ -226,7 +254,7 @@ export const BacktestRunSchema = z.object({
   created_at: z.string(),
   started_at: z.string().nullable().optional(),
   finished_at: z.string().nullable().optional(),
-  error: z.record(z.any()).nullable().optional(),
+  error: z.record(z.unknown()).nullable().optional(),
 });
 export type BacktestRun = z.infer<typeof BacktestRunSchema>;
 
@@ -283,8 +311,12 @@ export const MetricsPayloadSchema = z.object({
   sortino: z.number(),
   calmar: z.number(),
   win_rate: z.number(),
-  annual_returns: z.record(z.number()).default({}),
-  monthly_returns: z.record(z.number()).default({}),
+  // `optional()` (no `.default({})`) — keeps Zod input/output variance
+  // aligned for `BacktestResultSchema` consumers (see TASK-238). Call
+  // sites already coalesce with `?? {}` (e.g. `result.metrics?.
+  // monthly_returns ?? {}`) so dropping the default is safe.
+  annual_returns: z.record(z.number()).optional(),
+  monthly_returns: z.record(z.number()).optional(),
 });
 export type MetricsPayload = z.infer<typeof MetricsPayloadSchema>;
 

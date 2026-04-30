@@ -2,6 +2,21 @@
 
 V3 Phase 1 MVP 완료 태스크 append-only 로그.
 
+### Phase 1 리팩토링 일괄 (TASK-230/231/232/233/234/236/238 DONE) - 2026-04-30T15:00
+
+7 태스크 병렬 실행 (backend 6 + frontend 1). Reviewer 사전 검증 R1 NEEDS_REVISION → R2 PASS 거쳐 Coder 동시 호출.
+
+- **TASK-230** (source 어댑터 헬퍼 추출): `_helpers.py` 신규 (RateLimiter / safe_float / is_invalid_close). yfinance/pykrx 합산 -63줄. backward-compat alias 유지 (regression test 의 직접 import 보호).
+- **TASK-231** (allocator 검증 통합): `_validation.py` 신규 + `validate_weight_dict(allow_empty=...)` 1 함수. 3 allocator 1줄 위임. **관찰**: IEEE 754 boundary — 0.95/1.05 거부 (기존 동작 보존, math.isclose 전환은 별도 태스크 후보).
+- **TASK-232** (`_persist_results` 분해): 85줄 → 3 헬퍼 (`_build_equity_rows` / `_build_trade_dicts` / `_compute_and_flatten_metrics`) + `_persist_results` 22줄. 11 신규 단위 테스트.
+- **TASK-233** (calendar_guard 사적 import): `get_calendar_name(market) -> str | None` (unknown=None graceful). pipeline.py 사적 import 0 hit. 6 신규 단위 테스트.
+- **TASK-234** (페이지네이션 total): `asset_repository.count()` + `backtest_repository.count_runs()` 신규 public 메서드. 2 라우터 `total=len(...)` → `repo.count(...)` 교체. 4 신규 테스트.
+- **TASK-236** (registration silent swallow): `import logging` + logger.warning(asset_id/symbol/exc). 3 신규 caplog 단위 테스트.
+- **TASK-238** (BacktestResult/Asset 타입 통합): `lib/api/types.ts` 신규 (z.infer SoT). `z.record(z.any())` 7회 → `z.record(z.unknown())`. `as Record<...>` 캐스트 1건 제거. `Awaited<ReturnType<...>>` 트릭 3 호출처 제거.
+- **통합 회귀**: backend 123 passed (api fuzz/e2e 제외 — pre-existing baseline), frontend tsc 0 에러, npm build PASS.
+- **병렬 충돌**: 0건 (git status 깨끗, 7 Coder 가 각자 영역만 수정).
+- **관찰 후속 후보**: (1) IEEE 754 boundary (math.isclose), (2) AssetTable.tsx 도 listAssets 트릭, (3) test_api_contract.py 5 fuzz failure (pre-existing baseline).
+
 ### TASK-001 (DONE) - 2026-04-29T07:55
 - title: 프로젝트 스캐폴드 (backend/frontend, requirements/package.json, .env.example, README, Docker Compose Postgres+TimescaleDB)
 - assignee: coder

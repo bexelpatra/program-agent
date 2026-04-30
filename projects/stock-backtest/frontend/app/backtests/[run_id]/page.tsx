@@ -36,13 +36,7 @@ import { useToast } from "@/components/ui/toast";
 import { ApiError, api } from "@/lib/api/client";
 import { ko } from "@/lib/i18n/ko";
 import type { BacktestRun, BacktestStatus } from "@/lib/api/schemas";
-
-// Use the API function's actual return type — `BacktestResult` from
-// `schemas.ts` and `Awaited<ReturnType<...>>` here are structurally
-// identical but TS treats `z.infer` results from independent imports as
-// distinct nominal types in some compile contexts. Anchoring on the
-// client method's signature keeps `setResult` happy.
-type BacktestResult = Awaited<ReturnType<typeof api.getBacktestResult>>;
+import type { BacktestResult } from "@/lib/api/types";
 
 const STATUS_LABEL: Record<BacktestStatus, string> = {
   pending: ko.backtest.pending,

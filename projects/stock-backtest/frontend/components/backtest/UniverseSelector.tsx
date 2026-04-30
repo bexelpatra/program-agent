@@ -19,14 +19,15 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
 import { ko } from "@/lib/i18n/ko";
+import type { Asset } from "@/lib/api/types";
 
-// AssetTable.tsx 와 동일한 트릭: AssetSchema.meta 의 .default({}) 가
-// input/output variance 를 만들어 z.infer 와 listAssets() 의 실제 반환
-// 타입이 어긋난다. listAssets() 의 actual return 을 element 타입으로
-// 사용해 호출 사이트와 일치시킨다.
-export type UniverseAsset = Awaited<
-  ReturnType<typeof api.listAssets>
->["items"][number];
+// `Asset` 은 `lib/api/types.ts` 가 단일 정의처. 이전에는 `AssetSchema.
+// meta` 의 `.default({})` 가 input/output variance 를 만들어 `z.infer`
+// 결과와 `listAssets()` 실제 반환 타입이 nominal 으로 갈라졌고, 이를
+// 회피하려 `Awaited<ReturnType<typeof api.listAssets>>["items"][number]`
+// 트릭을 사용했다. TASK-238 에서 schemas.ts 의 record 타입을 정리해
+// variance 를 제거했으므로 단순 import 로 대체한다.
+export type UniverseAsset = Asset;
 
 interface Props {
   value: UniverseAsset[];

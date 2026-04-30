@@ -4,7 +4,7 @@ ticker 형식: 한국거래소 6자리 종목코드 (예: '069500' = KODEX 200).
 yfinance 와 달리 .KS / .KQ 접미사 없음.
 
 Rate limit: V1 결정 9 — pykrx 세션당 100ms sleep (yfinance 보다 관대).
-모듈 단위 lock 으로 동기화한다.
+공용 헬퍼는 ``_helpers`` 모듈에 응집되어 있다.
 
 수집 레이어 방어 (architecture.md V3 § 비거래일 방어):
 - close=0 / null / NaN 인 일봉 행은 어댑터에서 거부 + WARNING 로깅.
@@ -17,61 +17,26 @@ Rate limit: V1 결정 9 — pykrx 세션당 100ms sleep (yfinance 보다 관대)
 from __future__ import annotations
 
 import logging
-import time
 from datetime import date, datetime, timedelta, timezone
-from threading import Lock
 from typing import Any
 
 from pykrx import stock
 
+from ._helpers import RateLimiter, is_invalid_close, safe_float
 from .base import DividendEvent, OhlcvBar, TickerValidation
 
 logger = logging.getLogger(__name__)
 
 # V1 결정 9: pykrx 세션당 100ms sleep (yfinance 0.5s 보다 관대)
-_RATE_LIMIT_SLEEP_SEC = 0.1
-_rate_lock = Lock()
-_last_call_monotonic = [0.0]  # mutable wrapper for lock-protected mutation
-
-# pykrx 가 반환하는 naive datetime 에 부여할 한국 표준시 (UTC+9)
-_KST = timezone(timedelta(hours=9))
+_rate_limiter = RateLimiter(0.1)
 
 
 def _rate_limit() -> None:
-    """모듈 단위 호출 간격 보장. 멀티스레드 안전."""
-    with _rate_lock:
-        elapsed = time.monotonic() - _last_call_monotonic[0]
-        if elapsed < _RATE_LIMIT_SLEEP_SEC:
-            time.sleep(_RATE_LIMIT_SLEEP_SEC - elapsed)
-        _last_call_monotonic[0] = time.monotonic()
+    _rate_limiter.wait()
 
 
-def _is_nan(value: Any) -> bool:
-    """NaN 검출 — float NaN 은 자기 자신과 같지 않다."""
-    try:
-        return value != value
-    except Exception:
-        return False
-
-
-def _safe_float(value: Any) -> float | None:
-    """None/NaN → None, 그 외 → float."""
-    if value is None or _is_nan(value):
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _is_invalid_close(close: Any) -> bool:
-    """수집 레이어 close 거부 정책: None / NaN / 0 → invalid."""
-    if close is None or _is_nan(close):
-        return True
-    try:
-        return float(close) == 0.0
-    except (TypeError, ValueError):
-        return True
+# pykrx 가 반환하는 naive datetime 에 부여할 한국 표준시 (UTC+9)
+_KST = timezone(timedelta(hours=9))
 
 
 def _to_kst(ts: Any) -> datetime:
@@ -114,7 +79,7 @@ class PykrxSource:
         bars: list[OhlcvBar] = []
         for ts, row in df.iterrows():
             close = row.get("종가")
-            if _is_invalid_close(close):
+            if is_invalid_close(close):
                 logger.warning(
                     "rejected close=0/null/NaN bar symbol=%s time=%s", symbol, ts
                 )
@@ -123,14 +88,14 @@ class PykrxSource:
             bars.append(
                 OhlcvBar(
                     time=_to_kst(ts),
-                    open=_safe_float(row.get("시가")),
-                    high=_safe_float(row.get("고가")),
-                    low=_safe_float(row.get("저가")),
+                    open=safe_float(row.get("시가")),
+                    high=safe_float(row.get("고가")),
+                    low=safe_float(row.get("저가")),
                     close=close_f,
                     # MVP: pykrx 비조정 종가를 adj_close 로도 사용
                     # (split/dividend 보정은 향후 별도 호출 필요)
                     adj_close=close_f,
-                    volume=_safe_float(row.get("거래량")),
+                    volume=safe_float(row.get("거래량")),
                 )
             )
         return bars

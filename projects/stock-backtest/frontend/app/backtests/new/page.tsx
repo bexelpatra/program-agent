@@ -26,14 +26,9 @@ import type {
   BacktestCreate,
   FilterConfig,
   RebalanceSchedule,
-  StrategyDescriptor,
   StrategyListResponse,
 } from "@/lib/api/schemas";
-
-// `BacktestResult` 의 `z.infer` 결과와 client 메서드의 실제 반환 타입이
-// nominal 으로 갈라지는 문제를 회피 (자세한 설명은 /backtests/[run_id]/
-// page.tsx L41-45 동일 패턴).
-type BacktestResult = Awaited<ReturnType<typeof api.getBacktestResult>>;
+import type { BacktestResult, StrategyDescriptor } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -93,10 +88,7 @@ function findObjectParamKeys(
   descriptor: StrategyDescriptor | undefined,
 ): string[] {
   if (!descriptor) return [];
-  const props = (descriptor.params_schema?.properties ?? {}) as Record<
-    string,
-    { type?: string }
-  >;
+  const props = descriptor.params_schema.properties ?? {};
   return Object.entries(props)
     .filter(([, def]) => def?.type === "object")
     .map(([key]) => key);

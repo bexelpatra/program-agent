@@ -26,7 +26,7 @@ from app.data.asset_repository import SqlAssetRepository
 from app.data.repositories.ingestion_log_repository import IngestionLogRepository
 from app.data.repositories.ohlcv_repository import OhlcvRepository
 from app.data.sources.base import DataSource, OhlcvBar
-from app.domain.asset.calendar_guard import _MARKET_CALENDARS
+from app.domain.asset.calendar_guard import get_calendar_name
 from app.domain.asset.entity import Asset
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def _trading_days(market: str, start: date, end: date) -> list[date]:
             days.append(cursor)
             cursor = cursor + timedelta(days=1)
         return days
-    cal_name = _MARKET_CALENDARS.get(market)
+    cal_name = get_calendar_name(market)
     if cal_name is None:
         return []
     cal = xcals.get_calendar(cal_name)

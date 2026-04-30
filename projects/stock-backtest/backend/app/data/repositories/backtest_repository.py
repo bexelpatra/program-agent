@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Iterable
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.models.backtest import (
@@ -161,6 +161,18 @@ class BacktestRepository:
             )
             .scalars()
             .all()
+        )
+
+    def count_runs(self) -> int:
+        """`list_runs(...)` 와 동일 필터(전체 — list_runs 자체에 필터 없음) 의 row 수.
+
+        TASK-234: PaginatedResponse.total 정확화 — limit/offset 미적용 전체 카운트.
+        list_runs 가 추후 필터(status 등) 를 받게 되면 이 함수도 동일 시그니처로 확장한다.
+        """
+        return int(
+            self._session.execute(
+                select(func.count()).select_from(BacktestRun)
+            ).scalar_one()
         )
 
     def delete_run(self, run_id: int) -> bool:
