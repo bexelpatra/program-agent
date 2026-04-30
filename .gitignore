@@ -4,6 +4,10 @@ logs/
 # 대용량 로컬 데이터 (MP3 / transcript / 오프라인 캐시 등)
 projects/*/data/
 
+# Claude Coach: ingest.py 결과 (개인 사용 패턴 데이터, 재생성 가능)
+/data/sessions.jsonl
+/data/sessions.jsonl.tmp
+
 # 환경변수·시크릿
 .env
 *.env

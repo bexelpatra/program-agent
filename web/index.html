@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Coach</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <div id="error-banner" class="error-banner hidden" role="alert"></div>
+
+  <header class="page-header">
+    <div class="header-title">
+      <h1>Claude Coach</h1>
+      <p class="subtitle">메타인지 학습 대시보드 — 내 프롬프트가 Claude 의 사고를 어떻게 이끌었는지 살펴보세요</p>
+    </div>
+    <div class="header-stats">
+      <div class="stat-card">
+        <div class="stat-label">총 세션</div>
+        <div class="stat-value mono" id="stat-total-sessions">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">누적 학습 시간</div>
+        <div class="stat-value mono" id="stat-total-time">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">평균 Coach Score</div>
+        <div class="stat-value mono" id="stat-avg-score">–</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">최근 10세션 평균</div>
+        <div class="stat-value mono">
+          <span id="stat-recent-score">–</span>
+          <span id="stat-recent-delta" class="delta"></span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section id="empty-state" class="empty-state hidden">
+      <h2>아직 분석된 세션이 없습니다</h2>
+      <p>ingest.py 를 실행하거나 Stop 훅을 설치해 주세요.</p>
+    </section>
+
+    <div id="dashboard" class="dashboard hidden">
+      <section class="grid-row">
+        <div class="card chart-card">
+          <h2>5축 레이더</h2>
+          <p class="card-hint">전체 평균 vs 최근 10세션</p>
+          <div class="chart-wrap"><canvas id="radar-chart"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h2>Coach Score 트렌드</h2>
+          <p class="card-hint">최근 30 세션 (시간순)</p>
+          <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h2>툴 사용 분포</h2>
+          <p class="card-hint">전체 합산 상위 8개</p>
+          <div class="chart-wrap"><canvas id="tools-chart"></canvas></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>사고 과정 시각화</h2>
+        <p class="card-hint">메타인지 핵심 지표</p>
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-label">누적 thinking 토큰량 (chars)</div>
+            <div class="metric-value mono" id="metric-thinking">–</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">평균 병렬 도구 호출 비율</div>
+            <div class="metric-value mono" id="metric-parallel">–</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">서브에이전트 활용 회수</div>
+            <div class="metric-value mono" id="metric-subagent">–</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">정정 신호 비율</div>
+            <div class="metric-value mono" id="metric-correction">–</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>개인 맞춤 팁</h2>
+        <p class="card-hint">여러 세션에 반복 등장한 priority=1 패턴 상위 5개</p>
+        <div id="tips-list" class="tips-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>세션 타임라인</h2>
+        <p class="card-hint">최신순 — 행을 클릭하면 자세히 볼 수 있어요</p>
+        <div class="table-wrap">
+          <table class="sessions-table">
+            <thead>
+              <tr>
+                <th>시작시각</th>
+                <th>작업 디렉터리</th>
+                <th>기간</th>
+                <th>점수</th>
+                <th>턴 (U→A)</th>
+                <th>주요 툴</th>
+              </tr>
+            </thead>
+            <tbody id="sessions-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h2 id="modal-title">세션 상세</h2>
+        <button id="modal-close" class="modal-close" aria-label="닫기">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
