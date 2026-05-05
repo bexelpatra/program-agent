@@ -11,6 +11,7 @@
 | stock-backtest | 시계열 기반 자산배분·계절성 백테스팅 플랫폼 | `project/stock-backtest` | `/home/jai/pa/stock-backtest` | 2026-04-14 |
 | abc-english-app | ABC English 모바일 앱 (Flutter, Android 주력) | `project/abc-english-app` | `/home/jai/pa/abc-english-app` | 2026-04-22 |
 | temp | Claude Coach — 클로드 코드 사용 패턴 메타인지 학습 대시보드 | `project/temp` | `/home/jai/pa/temp` | 2026-04-30 |
+| eme | YouTube 구독 영상 다중 LLM 요약 알림 시스템 (정식 이름 미정) | `project/eme` | `/home/jai/pa/eme` | 2026-05-06 |
 
 ## Legacy 브랜치 (worktree 없음, 작업 미진행)
 
