@@ -138,6 +138,21 @@
     return res.json();
   }
 
+  function extractCoachError(body, status) {
+    // anthropic 에러: { error: "anthropic_http_error", detail: { error: { message } } }
+    if (body && body.detail && typeof body.detail === 'object') {
+      if (body.detail.error && body.detail.error.message) {
+        return body.detail.error.message;
+      }
+      // 그 외 객체 detail 은 한 줄 JSON 으로 (object Object 방지)
+      try { return JSON.stringify(body.detail); } catch (_) { /* fall through */ }
+    }
+    if (body && typeof body.detail === 'string' && body.detail) return body.detail;
+    if (body && body.hint) return body.hint;
+    if (body && body.error) return String(body.error);
+    return `HTTP ${status}`;
+  }
+
   async function postCoach(sessionId) {
     const res = await fetch(`/api/coach/${encodeURIComponent(sessionId)}`, {
       method: 'POST',
@@ -146,8 +161,7 @@
     let body = null;
     try { body = await res.json(); } catch (_) { /* ignore */ }
     if (!res.ok) {
-      const msg = body && (body.error || body.detail) ? `${body.error || ''}${body.detail ? ' — ' + body.detail : ''}` : `HTTP ${res.status}`;
-      throw new Error(msg);
+      throw new Error(extractCoachError(body, res.status));
     }
     return body || {};
   }

@@ -280,35 +280,65 @@ def _diagnosis_summary(sessions, weakest, axes_avg, axes_recent, type_counts) ->
 
 # ---------- Anthropic 코칭 ----------
 
-def _build_coach_messages(session: dict, principles_text: str) -> tuple[str, list[dict]]:
+def _pick_weak_axis(session: dict, principles: dict) -> tuple[str | None, float | None, list[str]]:
+    """세션의 session_type 의 fair_axes 중 score.axes 가 가장 낮은 축을 고른다.
+
+    반환: (axis_id, score, fair_axes) — fair_axes 는 LLM 에 전달해 평가 범위 좁히는 용도.
+    """
+    stype = session.get("session_type") or "mixed"
+    types = principles.get("session_types") or {}
+    fair = list((types.get(stype) or {}).get("fair_axes") or [])
+    if not fair:
+        fair = [a.get("id") for a in (principles.get("axes") or []) if a.get("id")]
+    axes_score = (session.get("score") or {}).get("axes") or {}
+    candidates = [(aid, axes_score.get(aid)) for aid in fair if isinstance(axes_score.get(aid), (int, float))]
+    if not candidates:
+        return None, None, fair
+    candidates.sort(key=lambda kv: kv[1])
+    aid, sc = candidates[0]
+    return aid, float(sc), fair
+
+
+def _build_coach_messages(session: dict, principles: dict, principles_text: str) -> tuple[list[dict], list[dict]]:
+    weak_axis, weak_score, fair_axes = _pick_weak_axis(session, principles)
+    stype = session.get("session_type") or "mixed"
+
     system_blocks = [
         {
             "type": "text",
             "text": (
-                "당신은 'Claude Coach' 의 코칭 에이전트입니다. 사용자가 클로드 코드(Anthropic 의 코딩 CLI)를 더 잘 쓰도록 한국어로 짧고 구체적인 피드백을 제공합니다.\n\n"
-                "제공되는 자료:\n"
-                "1) `principles` — 5축(명료성·효율성·경제성·계획성·건강도)별 원칙 모음\n"
-                "2) 사용자의 한 세션 메트릭 + worst-spot 추출본 + 첫 user 프롬프트 발췌\n\n"
-                "출력 형식 (한국어, markdown):\n"
-                "## 진단\n"
-                "- 이 세션이 무슨 작업이었는지 한 줄 (메트릭 기반)\n"
-                "- 가장 큰 개선 포인트 1개를 어느 원칙에 비추어 적시\n\n"
-                "## 더 잘 했더라면\n"
-                "사용자의 worst-spot 발췌를 인용하면서, '이렇게 첫 프롬프트를 썼다면…' 형태의 구체적 재작성 예시 1-2개를 제시. 코드블록 사용 가능.\n\n"
-                "## 다음 세션에 가져갈 1가지\n"
-                "- 한 줄짜리 행동 강령\n\n"
-                "톤: 짧고 단정적. 비난 대신 설계. 칭찬 끼워넣기 금지(분석에 집중)."
+                "당신은 'Claude Coach' 의 코칭 에이전트입니다. "
+                "사용자가 클로드 코드(Anthropic 의 코딩 CLI)를 **더 효율적으로** 쓰도록 한국어로 짧고 구체적인 피드백을 줍니다. "
+                "목표는 사용자가 다음 세션에서 같은 비효율을 반복하지 않게 만드는 것입니다.\n\n"
+                "## 평가 절차 (반드시 이 순서)\n"
+                "1. 입력의 `session_type` 을 확인하고, principles.session_types[<type>].fair_axes 에 해당하는 축만 평가합니다. "
+                "  fair_axes 밖의 약점은 지적하지 마세요 (예: one_shot 세션을 'TaskCreate 안 썼다'로 깎지 않음).\n"
+                "2. 입력에 `weakest_axis` 가 명시돼 있으면 그 축을 사용합니다. 없으면 fair_axes 중 score.axes 최저 축을 고릅니다.\n"
+                "3. 그 축 안의 principles 중 한 개를 골라, 사용자의 worst_spots[0].user_prompt_excerpt 와 anti_pattern / good_pattern 을 1:1 로 매핑합니다.\n"
+                "4. 발췌본이 비어 있으면 메트릭만 근거로 쓰고, 추측은 금지합니다.\n\n"
+                "## 출력 형식 (한국어, markdown)\n"
+                "### 진단\n"
+                "- 한 줄: 세션 작업 요약 (session_type + 메트릭 근거).\n"
+                "- 한 줄: 평가에 쓴 약한 축과 점수, 그리고 가장 가까운 principle id.\n"
+                "- 한 줄 인과: 어떤 메트릭/패턴이 어떤 비효율로 이어졌는지 (예: '`first_prompt_chars=18` → 의도 추측에 4턴 소진').\n\n"
+                "### 더 잘 했더라면\n"
+                "사용자의 user_prompt_excerpt 를 인용 (없으면 메트릭 패턴 인용) → '이렇게 썼더라면' 재작성 예시 1개. "
+                "재작성은 해당 principle 의 good_pattern 을 **본 사례 도메인에 맞게 변형** 해야 합니다 (예시를 그대로 베끼지 마세요). "
+                "코드블록 사용 가능.\n\n"
+                "### 다음 세션에 가져갈 휴리스틱\n"
+                "- 한 줄. 일반화 가능한 행동 강령 (예: '독립적인 read/grep 은 한 메시지에 묶어 보내기').\n\n"
+                "## 톤\n"
+                "짧고 단정적. 비난 대신 설계. 칭찬·립서비스 금지. 메트릭 인용은 백틱."
             ),
             "cache_control": {"type": "ephemeral"},
         },
         {
             "type": "text",
-            "text": "원칙(principles.json):\n" + principles_text,
+            "text": "참고: principles.json (axes·session_types 정의)\n```json\n" + principles_text + "\n```",
             "cache_control": {"type": "ephemeral"},
         },
     ]
 
-    # 세션 요약
     keep_keys = [
         "session_id", "start_ts", "duration_sec", "cwd",
         "session_type", "session_type_reason",
@@ -327,12 +357,23 @@ def _build_coach_messages(session: dict, principles_text: str) -> tuple[str, lis
     ]
     session_summary = {k: session.get(k) for k in keep_keys}
 
+    coaching_hint = {
+        "session_type": stype,
+        "fair_axes": fair_axes,
+        "weakest_axis": weak_axis,
+        "weakest_axis_score": round(weak_score, 1) if weak_score is not None else None,
+    }
+
     user_text = (
-        "다음은 분석할 한 세션의 메트릭과 발췌본입니다.\n\n```json\n"
+        "다음은 분석할 한 세션입니다. 메트릭·점수·worst_spots·session_type 이 모두 들어 있습니다.\n\n"
+        "## 코칭 힌트 (서버가 미리 계산)\n```json\n"
+        + json.dumps(coaching_hint, ensure_ascii=False, indent=2)
+        + "\n```\n\n"
+        "## 세션 데이터\n```json\n"
         + json.dumps(session_summary, ensure_ascii=False, indent=2)
         + "\n```\n\n"
-        "위 메트릭과 worst_spots 의 user_prompt_excerpt 를 근거로 코칭해 주세요. "
-        "발췌본이 비어 있으면 메트릭만 가지고 진단하되, 추측보다 메트릭에서 직접 읽히는 사실을 근거로 쓰세요."
+        "system 의 평가 절차와 출력 형식을 그대로 따르세요. "
+        "코칭 힌트의 fair_axes 밖은 평가하지 말고, weakest_axis 가 비어 있을 때만 직접 고르세요."
     )
 
     return system_blocks, [{"role": "user", "content": user_text}]
@@ -507,7 +548,7 @@ class CoachHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "session not found"}, HTTPStatus.NOT_FOUND)
                 return
             principles, principles_text = _load_principles()
-            system_blocks, messages = _build_coach_messages(session, principles_text)
+            system_blocks, messages = _build_coach_messages(session, principles, principles_text)
             code, result = _call_anthropic(system_blocks, messages)
             self._send_json(result, code)
             return
