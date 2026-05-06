@@ -2,11 +2,8 @@
 logs/
 
 # 대용량 로컬 데이터 (MP3 / transcript / 오프라인 캐시 등)
+# Claude Coach 의 sessions.jsonl 도 projects/claude-coach/data/ 에 위치하므로 함께 무시됨.
 projects/*/data/
-
-# Claude Coach: ingest.py 결과 (개인 사용 패턴 데이터, 재생성 가능)
-/data/sessions.jsonl
-/data/sessions.jsonl.tmp
 
 # 환경변수·시크릿
 .env
