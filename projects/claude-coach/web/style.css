@@ -8,6 +8,7 @@
   --row-border: #1f252e;
   --row-hover: #232a35;
   --tooltip-bg: #0a0d12;
+  --code-bg: #0a0d12;
   --text: #e6edf3;
   --text-on-accent: #0e1116;
   --muted: #9da7b3;
@@ -32,6 +33,7 @@
   --row-border: #e6ebf0;
   --row-hover: #f0f3f6;
   --tooltip-bg: #1f2328;
+  --code-bg: #f0f3f6;
   --text: #1f2328;
   --text-on-accent: #ffffff;
   --muted: #59636e;
@@ -809,7 +811,7 @@ main {
 }
 
 .code-block {
-  background: var(--tooltip-bg);
+  background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -888,7 +890,7 @@ main {
 
 .example-meta .em-score { color: var(--text); font-weight: 600; }
 .example-meta .em-type {
-  background: var(--tooltip-bg);
+  background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0 6px;
@@ -905,7 +907,7 @@ main {
   border-left: 3px solid var(--accent);
   padding: 4px 10px;
   margin: 6px 0;
-  background: var(--tooltip-bg);
+  background: var(--code-bg);
   border-radius: 0 6px 6px 0;
   font-size: 12.5px;
   color: var(--muted);
@@ -957,7 +959,7 @@ main {
   grid-column: 1 / -1;
   margin-top: 10px;
   padding: 12px 14px;
-  background: var(--tooltip-bg);
+  background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: 13px;
