@@ -632,6 +632,21 @@ V3 CLAUDE.md L20 원안 유지:
 - 단순화 표현: "각 자산은 자기 시장의 다음 거래일 시가에 체결"
 - BTC: D 일 UTC 00:00 종가 → D+1 일 UTC 00:00 종가 (24/7 시장이라 시가/종가 구분 없음)
 
+### EOD equity 기록 시점 (TASK-244 fix 후 명시)
+
+회계 정합성 (사용자 멘탈 모델 = 실거래) 을 위해 D 일 EOD equity 기록은 다음 흐름:
+- **D 일 EOD**: 그날의 시그널은 *결정만* 됐지 *체결은 아직* — 따라서 D EOD 평가는 거래 *전* 상태.
+  - 매도 시그널의 D EOD = 아직 매도 전 → 주식 시가 평가 그대로
+  - 매수 시그널의 D EOD = 아직 매수 전 → cash 그대로
+- **D+1 일 EOD**: D 시그널이 D+1 시가에 체결된 직후 + D+1 가격으로 평가.
+
+엔진 구현 (TASK-244 fix 후):
+- `pending_rebalance` 큐잉 패턴 — D iteration 에서 `apply_filters_and_allocator` 결과를 큐잉, *다음 iteration (D+1)* 시작 시점에 `execute_rebalance` 호출.
+- D 일 EOD equity 는 그날 시작 직후 (어제 시그널이 settlement 된 직후) portfolio + D 가격으로 기록.
+- 마지막 timeline 일자 시그널은 다음 iteration 부재로 settlement 안 됨 — 실거래 일관성 (마지막 영업일 시그널은 다음 영업일 부재라 유효 X).
+
+이전 동작 (TASK-244 이전 BUG): D iteration 안에서 시그널→D+1 settlement→D EOD equity 모두 처리. D EOD 평가에 D+1 가격으로 산 새 포지션이 D 가격으로 평가되어 회계 어긋남. 종가↔시가 갭이 큰 자산 (BTC 등) + 장기 백테스트에서 스노우볼 누적.
+
 ### 수수료 / 슬리피지 (V3 CLAUDE.md 디폴트)
 
 - 수수료: 한국 0.015% / 미국 0.005% / 암호화폐 0.1% (market 별 자동 적용)
