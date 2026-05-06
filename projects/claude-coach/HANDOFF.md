@@ -9,7 +9,8 @@
 사용자는 더 이상 의견을 묻지 말고 최선의 결정으로 실행해 달라고 했음.
 
 ## 작업 디렉토리
-- Primary: `/home/jai/pa/claude-coach` (이 worktree에서 작업)
+- Primary: `/home/jai/pa/claude-coach/projects/claude-coach` (이 프로젝트의 코드 루트)
+- Worktree 루트: `/home/jai/pa/claude-coach` (framework + project 함께)
 - 클로드 트랜스크립트 원본: `/home/jai/.claude/projects/<프로젝트별>/<sessionId>.jsonl`
   - 21개 프로젝트, 약 24만 줄. 충분한 백필 데이터 존재.
 - 클로드 설정: `/home/jai/.claude/settings.json` (전역), `settings.local.json` (프로젝트)
@@ -43,7 +44,7 @@
 
 ### 파일 구조
 ```
-/home/jai/pa/claude-coach/
+/home/jai/pa/claude-coach/projects/claude-coach/
 ├── HANDOFF.md              ← 이 문서
 ├── analyzer.py             [TODO] 트랜스크립트 1개 → 세션 메트릭 JSON
 ├── ingest.py               [TODO] ~/.claude/projects 전체 백필
@@ -126,7 +127,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/jai/anaconda3/bin/python3 /home/jai/pa/claude-coach/analyzer.py --hook"
+            "command": "/home/jai/anaconda3/bin/python3 /home/jai/pa/claude-coach/projects/claude-coach/analyzer.py --hook"
           }
         ]
       }
@@ -137,11 +138,11 @@
 훅 입력은 stdin JSON: `{session_id, transcript_path, cwd, hook_event_name}` 등.
 `analyzer.py --hook` 모드에서:
 1. stdin 파싱 → transcript_path 획득
-2. 메트릭 추출 → `/home/jai/pa/claude-coach/data/sessions.jsonl` 에 append (이미 같은 session_id 가 있으면 갱신)
+2. 메트릭 추출 → `/home/jai/pa/claude-coach/projects/claude-coach/data/sessions.jsonl` 에 append (이미 같은 session_id 가 있으면 갱신)
 3. `exit 0` (블로킹 금지)
 
 ### 서버
-`python3 /home/jai/pa/claude-coach/server.py [port=8765]`:
+`python3 /home/jai/pa/claude-coach/projects/claude-coach/server.py [port=8765]`:
 - `/` → web/index.html
 - `/app.js`, `/style.css` → 정적
 - `/api/sessions` → sessions.jsonl 전체 JSON 배열로 반환
