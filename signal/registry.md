@@ -13,6 +13,7 @@
 | claude-coach | Claude Coach — 클로드 코드 사용 패턴 메타인지 학습 대시보드 | `project/claude-coach` | `/home/jai/pa/claude-coach` | 2026-04-30 |
 | youtube-digest | YouTube 구독 영상 다중 LLM 요약 알림 시스템 | `project/youtube-digest` | `/home/jai/pa/youtube-digest` | 2026-05-06 |
 | page-guide | 페이지 가이드 — 서버 실행 서비스/포트 카탈로그 조회 페이지 | `project/page-guide` | `/home/jai/pa/page-guide` | 2026-05-07 |
+| podcast-study | 사용자 선택형 podcast 영어학습 (HTML-first adapter + LLM selector cache, abc-english 와 ES 인덱스 공유 예정) | `project/podcast-study` | `/home/jai/pa/podcast-study` | 2026-05-13 |
 
 ## Legacy 브랜치 (worktree 없음, 작업 미진행)
 
