@@ -24,7 +24,7 @@ from app.api.health import COMMON_ERROR_RESPONSES
 from app.data.sources import get_source_for_market
 from app.data.sources.pykrx_source import PykrxSource
 from app.data.sources.yfinance_source import YfinanceSource
-from app.dependencies import get_asset_repo, get_db
+from app.dependencies import get_asset_repo, get_db, get_theme_repo
 from app.domain.asset.entity import Asset, AssetType, Market
 from app.domain.asset.registration import (
     AlreadyRegistered,
@@ -35,6 +35,7 @@ from app.domain.asset.registration import (
     ValidationOutcome,
     register_asset,
 )
+from app.domain.themes.entity import AssetThemeHistory as AssetThemeHistoryEntity
 from app.models.ohlcv import Ohlcv
 from app.schemas.asset import (
     AssetCreate,
@@ -42,11 +43,19 @@ from app.schemas.asset import (
     AssetRead,
     OhlcvPoint,
 )
-from app.schemas.common import PaginatedResponse
+from app.schemas.common import ErrorResponse, PaginatedResponse
+from app.schemas.theme import AssetThemeHistoryRead
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/assets", tags=["assets"])
+
+# 본 라우터에서 추가로 발생 가능한 404 (없는 asset_id) 를 OpenAPI 에 명시.
+# schemathesis fuzz 가 "Undocumented HTTP status code" 로 fail 하지 않도록 한다.
+_ASSETS_NOT_FOUND_RESPONSES: dict[int | str, dict] = {
+    **COMMON_ERROR_RESPONSES,
+    404: {"model": ErrorResponse, "description": "리소스 없음"},
+}
 
 
 # --- 변환 헬퍼 ------------------------------------------------------------
@@ -266,3 +275,50 @@ def get_ohlcv(
         )
         for row in rows
     ]
+
+
+# --- Theme history (TASK-303 — assets 라우터에 추가된 8번째 endpoint) -----
+
+
+def _history_to_read(h: AssetThemeHistoryEntity) -> AssetThemeHistoryRead:
+    """도메인 AssetThemeHistory → AssetThemeHistoryRead.
+
+    `api/themes.py:_history_to_read` 와 동일 매핑이지만, assets 라우터가 themes
+    라우터에 의존하지 않도록 본 모듈에 작은 복제를 둔다 (DRY 보다 라우터 모듈
+    독립성이 더 중요 — 도메인 엔티티 자체는 공유, 매핑은 라우터 책임).
+    """
+    return AssetThemeHistoryRead(
+        history_id=h.history_id,
+        asset_id=h.asset_id,
+        theme_id=h.theme_id,
+        event_type=h.event_type,
+        from_theme_id=h.from_theme_id,
+        occurred_at=h.occurred_at,
+        source=h.source,
+        note=h.note,
+    )
+
+
+@router.get(
+    "/{asset_id}/theme_history",
+    response_model=list[AssetThemeHistoryRead],
+    summary="자산의 테마 변경 이력 (ADDED/REMOVED/RECLASSIFIED)",
+    responses=_ASSETS_NOT_FOUND_RESPONSES,
+)
+def get_asset_theme_history(
+    asset_id: int,
+    session: Session = Depends(get_db),
+) -> list[AssetThemeHistoryRead]:
+    """architecture.md V3 § "API (Phase 2)" L1033 — 자산의 테마 이력.
+
+    HTTP 매핑:
+        - 200: 빈 리스트 포함 정상 응답.
+        - 404: asset_id 부재.
+    """
+    repo = get_asset_repo(session)
+    if repo.find_by_id(asset_id) is None:
+        raise HTTPException(status_code=404, detail=f"asset_id={asset_id} not found")
+
+    theme_repo = get_theme_repo(session)
+    history = theme_repo.list_history(asset_id)
+    return [_history_to_read(h) for h in history]

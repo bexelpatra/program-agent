@@ -14,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 # UI 노출 시장 분류. 도메인 Market literal 과 동일 값을 가져야 한다.
 Market = Literal["KR", "US", "CRYPTO"]
 # 내부 정밀 분류. 도메인 AssetType literal 과 동일.
-AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO"]
+# STOCK = Phase 2 테마주 트랙 (개별주) — 백엔드 domain entity 와 1:1 동기.
+AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO", "STOCK"]
 
 
 class AssetRead(BaseModel):

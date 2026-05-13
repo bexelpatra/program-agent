@@ -13,7 +13,8 @@ architecture.md V3 § "자산 카탈로그 + 사용자 자유 추가" (L528-533)
 from typing import Literal, TypedDict
 
 Market = Literal["KR", "US", "CRYPTO"]
-AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO"]
+# STOCK = Phase 2 테마주 트랙 (개별주) — domain.asset.entity / schemas.asset 과 1:1 동기.
+AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO", "STOCK"]
 
 
 class SeedAsset(TypedDict):

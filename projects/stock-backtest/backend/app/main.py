@@ -21,6 +21,7 @@ from app.api import (
     backtests_router,
     health_router,
     strategies_router,
+    themes_router,
 )
 from app.schemas.common import (
     ErrorDetail,
@@ -131,6 +132,7 @@ def create_app() -> FastAPI:
     app.include_router(assets_router)
     app.include_router(strategies_router)
     app.include_router(backtests_router)
+    app.include_router(themes_router)
 
     app.openapi = _build_custom_openapi(app)  # type: ignore[method-assign]
 

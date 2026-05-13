@@ -33,49 +33,56 @@ from scripts.validation._helpers import (
 
 
 def case_c6_sixty_forty_monthly_mini() -> CaseResult:
-    """5-day 60/40 monthly rebalance — Jan 29 ~ Feb 2 (Jan-Feb 경계 2회 rebalance).
+    """5-day 60/40 monthly rebalance — Jan 29 ~ Feb 2 (Jan-Feb 경계 2회 시그널).
 
     NYSE 거래일 5개: Jan 29 Mon, 30 Tue, 31 Wed, Feb 1 Thu, Feb 2 Fri.
     가격:
         SPY: Day 0,1 = 100 / Day 2,3,4 = 110 (Jan 31 부터 +10%)
         TLT: 평탄 100
 
-    Hand-trace (slip=0.10%, US comm=0.005%):
-        Day 0 = Jan 29: rebalance fires (init). settlement = Jan 30. SPY=100, TLT=100.
-            equity_at_settle = 10000 (no positions).
-            target_qty_spy = floor(0.6 × 10000 / 100) = 60.
-            target_qty_tlt = floor(0.4 × 10000 / 100) = 40.
-            BUY SPY 60: gross = 100.1 × 60 = 6006. comm = 0.3003. cost = 6006.3003.
-                cash = 10000 - 6006.3003 = 3993.6997.
-            BUY TLT 40: cost_per_unit = 100.105005. max_aff = floor(3993.6997 / 100.105005)
-                = floor(39.8951...) = 39. actual = min(40, 39) = 39.
-                gross = 100.1 × 39 = 3903.9. comm = 0.19520. cost = 3904.0952.
-                cash = 89.6045.
-            EOD equity (Day 0 prices 100/100): 60×100 + 39×100 + 89.6045 = 9989.6045.
-        Day 1 (Jan 30): no rebalance. EOD prices (100/100). equity = 9989.6045.
-        Day 2 (Jan 31): no rebalance. EOD prices (110/100). equity = 60×110 + 39×100 + 89.6045
-                                                                  = 10589.6045.
-        Day 3 (Feb 1): rebalance fires (month change). settlement = Feb 2 (Day 4).
-            settlement prices (110/100). equity_at_settle = 10589.6045.
-            target_qty_spy = floor(0.6 × 10589.6045 / 110) = floor(57.7615...) = 57.
-            target_qty_tlt = floor(0.4 × 10589.6045 / 100) = floor(42.3584...) = 42.
-            sells: spy 60→57 = sell 3. buys: tlt 39→42 = buy 3.
-            SELL SPY 3 @ 110: effective = 110 × 0.999 = 109.89. gross = 329.67.
-                comm = 0.0164835. net = 329.6535165. cash = 89.6045 + 329.6535165
-                = 419.2580165.
-                spy pos: 60→57.
-            BUY TLT 3 @ 100: cost_per_unit = 100.105005. max_aff = floor(419.2580165
-                / 100.105005) = floor(4.18820...) = 4. actual = min(3, 4) = 3.
-                gross = 100.1 × 3 = 300.3. comm = 0.01502. cost = 300.31502.
-                cash = 419.2580165 - 300.31502 = 118.9429965.
-                tlt pos: 39→42.
-            EOD equity (Day 3 prices 110/100): 57×110 + 42×100 + 118.9430 = 10588.9430.
-        Day 4 (Feb 2): no rebalance. EOD prices (110/100). equity = 10588.9430.
+    TASK-244 큐잉 패턴 (D 시그널 → D+1 settlement, D EOD = pre-체결):
+        Day 0 (Jan 29): pending=None → settlement skip. EOD = pure cash 10000.
+            init signal 발생 (prev_d=None) → target_weights={SPY:0.6,TLT:0.4} 큐잉.
+        Day 1 (Jan 30): pending=Jan 29 시그널 → Day 1 가격 (100/100) 으로 settlement.
+            equity_at_settle = 10000.
+            target_qty_spy = floor(0.6×10000/100) = 60.
+            target_qty_tlt = floor(0.4×10000/100) = 40.
+            BUY SPY 60 @ 100: gross=100.1×60=6006, comm=0.3003, cost=6006.3003.
+                cash: 10000 → 3993.6997.
+            BUY TLT 40 @ 100: cost_per_unit=100.105005. max_aff=floor(3993.6997
+                /100.105005)=floor(39.8951)=39. actual=min(40,39)=39.
+                gross=100.1×39=3903.9, comm=0.195195, cost=3904.095195.
+                cash: 3993.6997 → 89.604505.
+            EOD Day 1 (가격 100/100): 60×100 + 39×100 + 89.604505 = 9989.604505.
+            month 동일 (Jan→Jan) → 시그널 큐잉 없음. pending=None.
+        Day 2 (Jan 31): pending=None → settlement skip. EOD (110/100): 60×110 + 39×100
+            + 89.604505 = 10589.604505. month 동일 (Jan) → 시그널 없음.
+        Day 3 (Feb 1): pending=None → settlement skip. EOD (110/100) = 10589.604505
+            (Day 2 와 동일, 가격 동일 + portfolio 동일).
+            month 변경 (Jan→Feb) → 시그널 발생.
+            allocator 는 D 종가 prices_until_d 만 사용 (FixedWeight 는 가격 무관, 비중
+            그대로 반환). target_weights={SPY:0.6,TLT:0.4} 큐잉.
+        Day 4 (Feb 2): pending=Feb 1 시그널 → Day 4 가격 (110/100) 으로 settlement.
+            equity_at_settle = 10589.604505.
+            target_qty_spy = floor(0.6×10589.604505/110) = floor(57.7615) = 57.
+            target_qty_tlt = floor(0.4×10589.604505/100) = floor(42.3584) = 42.
+            SELL SPY 3 @ 110: effective=110×0.999=109.89. gross=109.89×3=329.67.
+                comm=329.67×0.00005=0.0164835. net=329.6535165.
+                cash: 89.604505 → 419.2580215. spy: 60→57.
+            BUY TLT 3 @ 100: cost_per_unit=100.105005. max_aff=floor(419.2580215
+                /100.105005)=floor(4.18820)=4. actual=min(3,4)=3.
+                gross=100.1×3=300.3, comm=300.3×0.00005=0.015015, cost=300.315015.
+                cash: 419.2580215 → 118.9430065. tlt: 39→42.
+            EOD Day 4 (가격 110/100): 57×110 + 42×100 + 118.9430065 = 10588.9430065.
+            month 동일 (Feb) → 시그널 없음. (마지막 timeline 이라도 무관 — 큐잉 안 됨.)
 
-    Final state: spy=57, tlt=42, cash=118.9430, equity=10588.9430.
-    num_fills = 4 (init buy spy + init buy tlt + rebalance sell spy + rebalance buy tlt).
-    equity_curve = [9989.6045, 9989.6045, 10589.6045, 10588.9430, 10588.9430]
-    peak = 10589.6045 (Day 2). MDD = (10588.9430 - 10589.6045) / 10589.6045 = -6.2052e-5.
+    Final state: spy=57, tlt=42, cash=118.9430065, equity=10588.9430065.
+    num_fills = 4 (init buy spy + init buy tlt + 리밸런 sell spy + 리밸런 buy tlt).
+    equity_curve = [10000.0000, 9989.6045, 10589.6045, 10589.6045, 10588.9430]
+    peak = 10589.604505 (Day 2 / Day 3 tie, running max).
+    MDD: Day 1 dd = (9989.6045 - 10000)/10000 = -0.001039550 (가장 큰 낙폭).
+         Day 4 dd = (10588.9430 - 10589.6045)/10589.6045 ≈ -6.2052e-5 (작음).
+    → MDD = -0.0010395495 (Day 0 → Day 1, 매수 1회 수수료/슬립 손실).
     """
     base = "USD"
     period_start = date(2024, 1, 29)
@@ -104,14 +111,17 @@ def case_c6_sixty_forty_monthly_mini() -> CaseResult:
         base, period_start, period_end, initial_cash, universe, prices, fx, strategy
     )
 
-    # Hand-computed expected (위 docstring 의 trace 결과).
+    # Hand-computed expected (TASK-244 큐잉 패턴 — 위 docstring trace 결과).
     EXPECTED_QTY_SPY = 57.0
     EXPECTED_QTY_TLT = 42.0
-    EXPECTED_CASH = 118.94299650
-    EXPECTED_FINAL_EQUITY = 10588.94299650
+    EXPECTED_CASH = 118.9430065
+    EXPECTED_FINAL_EQUITY = 10588.9430065
+    EXPECTED_INITIAL_EQUITY = 10000.0  # Day 0 = pure cash
+    EXPECTED_DAY1_EQUITY = 9989.604505
     EXPECTED_NUM_FILLS = 4
-    EXPECTED_PEAK = 10589.6045
-    EXPECTED_MDD = (10588.94299650 - 10589.6045) / 10589.6045
+    EXPECTED_PEAK = 10589.604505
+    # 가장 큰 dd 는 Day 0(10000) → Day 1(9989.6045) 매수 직후 수수료/슬립 손실.
+    EXPECTED_MDD = (EXPECTED_DAY1_EQUITY - EXPECTED_INITIAL_EQUITY) / EXPECTED_INITIAL_EQUITY
 
     return CaseResult(
         case_id="C6",
@@ -123,13 +133,14 @@ def case_c6_sixty_forty_monthly_mini() -> CaseResult:
             check_float("qty_tlt_final", run.final_qty_by_asset.get(tlt_id, 0), EXPECTED_QTY_TLT),
             check_float("cash_USD_final", run.final_cash_by_ccy.get("USD", 0), EXPECTED_CASH, rel=1e-7),
             check_float("final_equity", run.final_equity, EXPECTED_FINAL_EQUITY, rel=1e-7),
+            check_float("initial_equity", run.initial_equity, EXPECTED_INITIAL_EQUITY, rel=1e-7),
             check_float("peak_equity", run.peak_equity, EXPECTED_PEAK, rel=1e-7),
             check_float("mdd", run.mdd, EXPECTED_MDD, rel=1e-4),
             check_eq("num_equity_points", run.num_equity_points, 5),
         ],
         notes=[
-            "수동 계산: docstring trace 참조",
-            f"기대 equity_curve = [9989.6045, 9989.6045, 10589.6045, 10588.9430, 10588.9430]",
+            "수동 계산: docstring trace 참조 (TASK-244 큐잉 패턴)",
+            "기대 equity_curve = [10000.0000, 9989.6045, 10589.6045, 10589.6045, 10588.9430]",
         ],
     )
 
@@ -197,14 +208,15 @@ def case_c7_mdd_synthetic_series() -> CaseResult:
 def case_c8_crash_recovery_single() -> CaseResult:
     """5-day 단일 SPY 100% BH, 가격 [100,100,120,80,90], yearly rebalance.
 
-    Init buy Day 1 @ 100: qty=99, cost=9910.395, cash=89.6045.
-    EOD equity:
-        Day 0 (P=100): 99×100 + 89.60 = 9989.60
-        Day 1 (P=100): 9989.60
-        Day 2 (P=120): 99×120 + 89.60 = 12009.60  ← peak
-        Day 3 (P=80):  99×80  + 89.60 = 8009.60   ← trough
-        Day 4 (P=90):  99×90  + 89.60 = 8999.60
-    MDD = (8009.60 - 12009.60) / 12009.60 = -4000 / 12009.60 = -0.333055.
+    TASK-244 큐잉 패턴:
+        Day 0: pure cash 10000 (init signal 큐잉만, settlement X).
+        Day 1: settlement at p[1]=100 → qty=99, cost=9910.3955, cash=89.6045.
+               EOD prices (P=100): 99×100 + 89.6045 = 9989.6045.
+        Day 2 (P=120): no rebalance. EOD = 99×120 + 89.6045 = 11969.6045  ← peak
+        Day 3 (P=80):  no rebalance. EOD = 99×80  + 89.6045 = 8009.6045   ← trough
+        Day 4 (P=90):  no rebalance. EOD = 99×90  + 89.6045 = 8999.6045
+    MDD = (8009.6045 - 11969.6045) / 11969.6045 = -0.330874.
+    equity_curve = [10000, 9989.6045, 11969.6045, 8009.6045, 8999.6045].
     """
     base = "USD"
     period_start = date(2024, 1, 2)

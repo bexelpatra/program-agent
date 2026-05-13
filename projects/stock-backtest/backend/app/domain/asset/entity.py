@@ -15,7 +15,8 @@ from typing import Literal
 Market = Literal["KR", "US", "CRYPTO"]
 
 # 내부 정밀 분류. Phase 2 에서 UI 세분화 시 활용.
-AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO"]
+# STOCK = Phase 2 테마주 트랙 (개별주) — architecture.md V3 § "V3 Phase 2 — 테마주 추적/관찰 모듈" L823~.
+AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO", "STOCK"]
 
 
 # ===== Fractional 매매 정책 (V3 Q8 재결정 — 2026-04-29) =====

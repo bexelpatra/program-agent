@@ -1,172 +1,324 @@
 ---
-task_id: TASK-211, TASK-212, TASK-213, TASK-214, TASK-215, TASK-216
-verdict: PASS
+agent: reviewer
+project_id: stock-backtest
+target: Phase 2.1 — 테마주 추적 모듈 MVP (TASK-300~310 + TASK-311)
+scope:
+  - signal/stock-backtest/architecture.md L19 / L93 / L520 / L740~743 / L823~1102
+  - signal/stock-backtest/task-board.md L228~290
+  - projects/stock-backtest/CLAUDE.md (Phase 1/2 트랙 분리)
+  - projects/stock-backtest/.env.example (NAVER_DATALAB_* 추가)
+date: 2026-05-12
+verdict: NEEDS_REVISION
 ---
 
-# Reviewer Report: 엔진 결함 수정 6 태스크 재검증 (TASK-211~216)
+# Reviewer Report — Phase 2.1 분해 검증
 
-(2026-04-30 BTC 분기 리밸런싱 시나리오 결함 수정 — 직전 NEEDS_REVISION 6 항목 후속 검증.)
+## 1. 판정 요약
 
-## 검증 대상
-- 파일:
-  - `/home/jai/pa/stock-backtest/signal/stock-backtest/task-board.md` L99-121 (엔진 결함 수정 섹션 + 실행 순서 권고)
-  - 코드 인용 재검증:
-    - `backend/app/domain/engine.py` L210-258 (target_weights 분기 + execute_rebalance 호출)
-    - `backend/app/domain/trade.py` L79-92 (TradeFill), L171-194 (_classify_orders), L197-230 (_execute_sells), L233-293 (_execute_buys), L296-374 (execute_rebalance + L361/L366 sell/buy_fills 호출)
-    - `backend/app/services/backtest_runner.py` L226-251
-    - `backend/app/data/pipeline.py`, `backend/app/data/sources/{base,yfinance_source,pykrx_source}.py`
-    - `backend/tests/golden/snapshots/` (9 파일)
-  - `signal/stock-backtest/blockers.md` (BLOCKER-001/002 존재, 003 추가 예정)
-- Manager 주장 요약: 직전 NEEDS_REVISION 6 항목 모두 task-board.md 에 반영 완료.
+**NEEDS_REVISION** — 코어 설계와 의존성 그래프, 검증 명령은 모두 실측과 일치하지만 **TASK-300 의 "AssetType Literal 3곳 동기" 주장이 불완전**하다. 실측 결과 동일 Literal 이 **5곳**에 존재하며, 누락된 2곳 중 1곳(`backend/app/data/seed/assets_catalog.py:16`)은 진짜 `Literal` 타입 정의이므로 동기하지 않으면 추후 STOCK 시드 등록 시 mypy/pyright 가 잡는다. 나머지 2건은 docstring/주석이라 비-블로커지만 같이 정리하는 편이 클린코드 원칙에 부합. 또한 TASK-303 본문에 **"6 엔드포인트" 라고 적어두고 ①~⑧ 8개를 나열**한 카운트 불일치가 있어 Coder/Reviewer 가 DoD 검증 시 혼선을 일으킬 수 있다. 위 2가지를 수정하면 PASS 가능.
 
-## 직전 6 수정 요청 반영 검증
+---
 
-### 1. TASK-211 — invariant 명시 + KeyError silent 0 금지 정책
+## 2. 검증 결과 — 항목별
 
-**요구**: 빈 dict entry path 에서 prices/asset_meta 가 보유 자산 cover 한다는 invariant + KeyError 명시 처리.
+### A. 파일 존재 / 실측 정확성
 
-**반영 확인** (task-board.md L108):
-- ③ "**invariant 명시**: 빈 target_weights entry path 에서 `prices` (=settlement_prices) 와 `asset_meta` 가 **현재 보유 자산까지 cover** 한다는 가정을 단위 테스트로 박제. 보유 자산이 universe 부분집합이라는 불변 조건." — 명시.
-- ④ "**에러 정책**: 보유 자산이 prices/asset_meta 에 없으면 silent 0 금지 정책에 따라 `MissingPriceError` 명시적 예외 (현 trade.py L210-215 fallback 은 매도용 sell-only 청산이라 OK, 단 asset_meta 부재 시 KeyError 명시 catch)." — 명시.
-- 테스트: "boundary '보유 자산이 universe 의 부분집합' invariant 검증" 추가됨.
+| Manager 주장 | 실측 결과 | 판정 |
+|---|---|---|
+| alembic head = `0004_fractional_qty` (down_revision='0003_backtest_tables') | `backend/alembic/versions/0004_fractional_qty.py:30` 의 `down_revision = "0003_backtest_tables"` 확인. 0001~0004 4 파일만 존재 (`__pycache__` 외) | PASS |
+| `backend/app/domain/asset/entity.py:18` 에 `AssetType` Literal 정의 | 실측 L18: `AssetType = Literal["EQUITY_INDEX", "ETF", "BOND", "COMMODITY", "CRYPTO"]` — STOCK 부재 확인 | PASS |
+| `backend/app/schemas/asset.py:17` 동일 Literal | 실측 L17 동일 — STOCK 부재 확인 | PASS |
+| `frontend/lib/api/schemas.ts:38-45` `AssetTypeEnum` | 실측 L38-45 `z.enum(["EQUITY_INDEX","ETF","BOND","COMMODITY","CRYPTO"])` — STOCK 부재 확인 | PASS |
+| `backend/app/main.py:130-133` 4 `include_router` | 실측 L130-133: `health_router, assets_router, strategies_router, backtests_router` 4건 — 정확 | PASS |
+| `backend/app/data/asset_repository.py` 163줄 | `wc -l` = 163 | PASS |
+| `backend/app/data/repositories/backtest_repository.py` 273줄 | `wc -l` = 273 | PASS |
+| `backend/app/api/assets.py` 268줄 | `wc -l` = 268 | PASS |
+| `backend/app/domain/themes/` 부재 | `ls backend/app/domain/` 결과: `allocators asset filters calendar.py dividend.py engine.py metrics.py portfolio.py strategy.py tax.py trade.py` — `themes/` 디렉토리 없음 | PASS (신규) |
+| `frontend/app/themes/` / `components/themes/` / `hooks/useThemeChartData.ts` 부재 | `find ... -path '*themes*'` 결과 0 hit | PASS (신규) |
+| `period_adjustment.adjust_period_for_universe` 재사용 가능 | `backend/app/domain/asset/period_adjustment.py:62` 에 정의 존재 | PASS |
+| `calendar.align_universe_prices` 재사용 가능 | `backend/app/domain/calendar.py:73` 에 정의 존재 | PASS |
+| `frontend/lib/api/types.ts` SoT 패턴 (TASK-238) | `frontend/lib/api/` = `client.ts schemas.ts types.ts` 3 파일 — 존재 | PASS |
+| `backend/app/services/backtest_runner.py` (TASK-309 검증 대상) | `app/services/` = `__init__.py backtest_runner.py data_loader.py` — 존재 | PASS |
+| `backend/app/dependencies.py` (TASK-303 수정 대상) | `find ... -name dependencies.py` → `/backend/app/dependencies.py` 1 hit | PASS |
+| `frontend/components/backtest/UniverseSelector.tsx` (TASK-311 대상) | `find ...` 결과 존재 (`UniverseCard` 는 0 hit) | NOTE: TASK-311 에 "UniverseCard (또는 UniverseSelector.tsx)" 로 적혀 있어 OK |
+| `backend/tests/architecture/` 신규 디렉토리 (TASK-309) | `ls` 실패 — 부재 확인. TASK-309 가 생성 | PASS |
+| `backend/tests/data/` (TASK-302 신규 테스트 대상) | `ls backend/tests/` 결과에 `data` 존재 | PASS |
+| `backend/tests/e2e/` (TASK-310 신규 테스트 대상) | `ls backend/tests/` 결과에 `e2e` 존재 | PASS |
 
-**판정: 반영 OK**
+**AssetType Literal "3곳 동기" 주장 — 누락 적발 (블로커)**:
 
-### 2. TASK-212 — `_execute_sells/_execute_buys` 시그니처 변경 4단계 풀어쓰기
+`grep -rn "EQUITY_INDEX.*ETF.*BOND.*COMMODITY.*CRYPTO" backend frontend` 결과:
 
-**요구**: ② sells/buys 시그니처에 rebalance_date 인자 추가, ③ execute_rebalance 호출 시 rebalance_date 전달, ④ TradeFill 에 settlement_date=rebalance_date 채움, ⑤ backtest_runner.py:242 datetime.combine 으로 교체.
+| 파일:라인 | 종류 | TASK-300 포함 여부 |
+|---|---|---|
+| `backend/app/domain/asset/entity.py:18` | 진짜 Literal 정의 | 포함 |
+| `backend/app/schemas/asset.py:17` | 진짜 Literal 정의 | 포함 |
+| `frontend/lib/api/schemas.ts:38-45` | 진짜 `z.enum` | 포함 |
+| **`backend/app/data/seed/assets_catalog.py:16`** | **진짜 Literal 정의 (SeedAsset TypedDict 의 asset_type 필드 타입)** | **누락** |
+| `backend/app/api/assets.py:132` | description 문자열 (FastAPI Query) — 사용자 노출 docstring | 누락 (UX 노이즈, 비-블로커) |
+| `backend/app/models/asset.py:36` | 컬럼 위 주석만 | 누락 (비-블로커, 정보용 주석) |
 
-**반영 확인** (task-board.md L109):
-- ① TradeFill 에 settlement_date 추가 — 명시.
-- ② `_execute_sells` (L197) / `_execute_buys` (L233) 시그니처에 `rebalance_date: date` 인자 추가 — 명시 (실측 라인 L197/L233 정확).
-- ③ `execute_rebalance` (L361 sell_fills 호출, L366 buy_fills 호출) 가 `rebalance_date=rebalance_date` 전달 — 명시 (실측: L361 `sell_fills = _execute_sells(`, L366 `buy_fills = _execute_buys(` 정확).
-- ④ TradeFill 생성 시 settlement_date=rebalance_date 채움 (L228, L290 두 위치) — 명시 (실측: L227-229 SELL TradeFill, L290-292 BUY TradeFill, ±2 라인 허용 내).
-- ⑤ backtest_runner.py:242 를 `datetime.combine(fill.settlement_date, datetime.min.time(), tzinfo=timezone.utc)` 로 교체 — 명시 (실측 L242 `"time": getattr(fill, "time", now),` 정확).
+→ **TASK-300 의 (c) DoD "AssetType Literal 3곳 grep 'STOCK' = 3 hits" 는 최소 "Literal/Enum 4곳 grep = 4 hits" 로 수정 필요**.
 
-**판정: 반영 OK** (5 단계 모두 정확한 라인·시그니처로 풀어쓰기 완료)
+### B. 의존성 그래프 무결성
 
-### 3. TASK-213 — 운영 액션 분리
+`Depends On` 컬럼 ↔ 그래프 대조:
 
-**요구**: 옵션 A (별도 신규 태스크 TASK-216 분리) 또는 옵션 B (본문 명확화).
+| TASK | Depends On (테이블) | 그래프 표기 | 일치 |
+|---|---|---|---|
+| 300 | - | root | PASS |
+| 301 | TASK-300 | 300→301 | PASS |
+| 302 | TASK-301 | 301→302 | PASS |
+| 303 | TASK-302 | 302→303 | PASS |
+| 304 | TASK-301 | 301→304 | PASS |
+| 305 | TASK-303, TASK-304 | 303→305 (304 의존 별기) | PASS |
+| 306 | TASK-303 | 303→306 | PASS |
+| 307 | TASK-306 | 306→307 | PASS |
+| 308 | TASK-306 | 306→308 | PASS |
+| 309 | TASK-301 | 301→309 | PASS |
+| 310 | TASK-307, TASK-308, TASK-309 | 309·307·308→310 ("모두 완료 후" 표기) | PASS |
+| 311 | TASK-310 | 310→311 | PASS |
 
-**반영 확인** (task-board.md L110, L113):
-- TASK-213 description 끝: "**이 태스크는 코드 변경만 담당** — BTC ohlcv 재백필 운영 액션은 TASK-216 (Execution=user) 분리." — 명시.
-- TASK-216 신규 등록: "BTC asset_id=56 ohlcv 전체 삭제 + 재백필 수동 트리거", Execution=`user`, Assignee=`manager`, Depends On=TASK-213.
+→ **전 항목 일치**.
 
-**판정: 반영 OK** (옵션 A 채택, 깔끔한 분리)
+**병렬 충돌 검사**:
 
-### 4. TASK-214 — `auto_adjust=True` 한 가지로 결정 명시
+- 2차 (TASK-302 + TASK-304 + TASK-309 병렬):
+  - 302 → `backend/app/data/theme_repository.py` (신규)
+  - 304 → `backend/app/domain/themes/normalization.py` (신규)
+  - 309 → `backend/tests/architecture/test_no_cross_import.py` (신규)
+  - **충돌 0**
+- 5차 (TASK-307 + TASK-308 병렬):
+  - 307 → `frontend/app/themes/page.tsx`, `frontend/components/themes/{ThemeList, ThemeEditor, AssetPicker}.tsx`, `lib/i18n/ko.ts` (`theme.*` namespace)
+  - 308 → `frontend/app/themes/[theme_id]/page.tsx`, `frontend/components/themes/charts/{NormalizedPriceChart, ThemeAggregateChart, ThemeCompareChart}.tsx`, `frontend/hooks/useThemeChartData.ts`
+  - 두 태스크 모두 `frontend/components/themes/` 디렉토리에 파일 추가하지만 **서로 다른 파일명** + **307 은 components/themes/ 직하, 308 은 components/themes/charts/ 서브** 으로 분리.
+  - **잠재 충돌 1건 (권고급)**: 둘 다 `lib/i18n/ko.ts` 의 `theme.*` namespace 를 건드릴 수 있음. TASK-307 에는 명시 (DoD "lib/i18n/ko.ts theme.* namespace 신규"), TASK-308 에는 i18n 언급 없음. 단 TASK-308 본문에 "recharts LineChart 다중 라인 + tooltip 한국어" 명시 → ko.ts 또는 컴포넌트 내 inline 라벨로 처리 가능. 병렬 실행 시 last-write-wins 충돌 잠재 위험.
 
-**요구**: Manager 가 결정해서 한 가지로 명시. 권장 = `auto_adjust=True`.
+### C. DoD 측정 가능성
 
-**반영 확인** (task-board.md L111):
-- 제목: "분할/증자/감자 처리 — 임시처방 (A 방향: yfinance auto_adjust=True 전환 + pykrx 한계 명시)" — 결정 명시.
-- "**결정 명시**: `auto_adjust=True` 채택 (close 자체가 분할/배당 소급 보정. OhlcvBar.close 만 사용하면 끝, 호출부 변경 최소). `OhlcvBar.adj_close` 는 호환성 위해 유지 (auto_adjust=True 시 Adj Close 동일 값)." — 결정 근거 명시.
-- ① yfinance_source.py:83 `auto_adjust=False` → `auto_adjust=True` — 단일 변경 명시.
-- ③ architecture.md "거래 정책" 섹션 갱신 sub-action 명시.
+각 태스크 DoD 의 PASS/FAIL 판정 가능성:
 
-**판정: 반영 OK** (한 가지로 결정 + 결정 근거까지 박제)
+- **TASK-300**: (a) `alembic upgrade head` 성공 → 명령 명확. (b) 테이블 생성 확인 → `\dt` 또는 `pg_tables` 쿼리. (c) **"grep 3 hits" 주장은 실측 누락 1건으로 인해 "4 hits 이상" 으로 수정 필요 (블로커)**. (d) `pytest tests/api/test_api_contract.py` 회귀 0 — 명령 명확하나 "5/16 baseline" 표현이 모호 (실측 `def test_` = 11). → 권고: baseline 표현을 일반화하거나 정확히 인용.
+- **TASK-301**: (a) banned imports 0 → `grep -E "^from sqlalchemy|^from fastapi" backend/app/domain/themes/` = 0 hit 로 강제 가능. (b) Protocol 8 메서드 → grep 명확. (c) 단위 테스트 5건 → pytest count 명확. PASS
+- **TASK-302**: (a) Protocol 만족 → mypy/pyright 또는 isinstance 런타임 체크 명시. (b) 통합 테스트 5건 → 명확. PASS
+- **TASK-303**: **본문 "6 엔드포인트" 라고 적고 ①~⑧ 8개 나열 + DoD (a) "8 엔드포인트 OpenAPI 등록"**. → **카운트 모순 (6 ≠ 8)** (블로커). Coder 가 6개만 구현하면 DoD 의 8 등록과 충돌.
+- **TASK-304**: 단위 테스트 8건 + 수학적 성질 명시 → PASS
+- **TASK-305**: 통합 테스트 3건 + OpenAPI 등록 → PASS. **데이터 의존**: theme 에 active 자산 + ohlcv 적재 필요 → "test fixture 로 mock" 명시 → PASS
+- **TASK-306**: `tsc 통과`, `npm run build` PASS, round-trip 테스트 3건 → PASS
+- **TASK-307**: 라우트 정적 빌드 + 한국어 라벨 grep 5건 + 단위 테스트 3건 → PASS
+- **TASK-308**: 차트 라우트 빌드 + 단위 테스트 3건 → PASS
+- **TASK-309**: importlib/ast 로 3 invariant 검증 → PASS. **검증 가능 패턴 명확** (banned imports grep).
+- **TASK-310**: 회귀 baseline 모두 실측 검증됨:
+  - **`pytest tests/golden/` 9/9** — 실측: snapshots/ 디렉토리에 9 JSON (3 scenario × 3 strategy). PASS
+  - **`python -m scripts.validation.run_all` 11/11** — 실측: validation-report.md L7-14 (L1=5, L2=3, L3=1, L4=2 = 11). PASS
+  - **`pytest tests/regression/` 50/50** — 실측: `grep -c "def test_"` = 23 (calendar_defense) + 8 (lookahead) + 19 (cash_by_ccy) = **50**. PASS
+  - **`pytest tests/api/test_api_contract.py` 회귀 0** — 실측: `def test_` 함수 = 11. TASK-310 본문에 baseline 비교 표현 OK.
+- **TASK-311**: 토스트 노출 + 단위 테스트 2건 → PASS
 
-### 5. 실행 순서 권고 + golden baseline 통합 재생성 책임자 (TASK-215) 신설
+### D. 클린 아키텍처 / 격리 원칙
 
-**요구**: TASK-211/212/214 모두 DONE 후 TASK-215 신설 (단일 책임자) + 실행 순서 명시.
+- TASK-301 "도메인 순수 (banned imports 0)" 강제 → TASK-309 가 정확히 이를 정적 검증으로 박제 (AST 또는 importlib). PASS
+- TASK-309 격리 정적 검증 → architecture.md L1063-1067 "양방향 import 금지" 정책과 정확히 일치. 검증 대상 6 모듈 (engine/strategy/allocators/filters/trade/portfolio) 명시. **추가 권고**: TASK-309 invariant 3 ("backtest_runner.py 안에서 themes 의존 0 hit") 을 "services/* 전체에서 themes 의존 0 hit" 로 일반화하면 향후 회귀 방지에 더 강건. 현재 `app/services/` 에 backtest_runner.py + data_loader.py 2 파일 존재.
+- TASK-303 단일 파일 크기 우려 → themes.py 에 6+2 = 8 endpoint + 2 차트 endpoint (TASK-305) = **총 10 endpoint**. 패턴 reference `assets.py` 268줄 (~12 endpoint) → themes.py 10 endpoint 약 220-260줄 예상. **단일 파일 우려 낮음**.
 
-**반영 확인** (task-board.md L112, L115-121):
-- TASK-215 신규 등록: "골든 baseline 9 케이스 통합 재생성", Assignee=`tester`, Depends On=`TASK-211, TASK-212, TASK-214`, 9 파일 명시 (`scenario_{1,2,3}__{fixed,all,equal}_weight.json`).
-- 실측: `backend/tests/golden/snapshots/` 디렉토리에 9 파일 모두 존재 (scenario_1_kr_only / scenario_2_kr_us / scenario_3_us_crypto × all_weather/equal_weight/fixed_weight). 단, **파일명이 description (`scenario_{1,2,3}__{fixed,all,equal}_weight.json`) 과 일치하지 않음** (실제: `scenario_1_kr_only__fixed_weight.json` 형태). Coder/Tester 가 파일을 실제 디렉토리에서 보고 작업할 가능성이 높아 큰 위험은 아님 — 관찰만 기록 (NEEDS_REVISION 사유는 아님).
-- "## 실행 순서 권고" 섹션 (L115-121) 추가:
-  1. 순차 1: TASK-212 → TASK-211 (TradeFill 모델 변경 먼저)
-  2. 순차 2: TASK-213 → TASK-214 (yfinance/pykrx 동일 파일 충돌 회피)
-  3. 병렬: 순차 1 ↔ 순차 2
-  4. 마지막: TASK-215 (단일 책임자)
-  5. 사용자 액션: TASK-216 (TASK-213 DONE 후)
+### E. 누락 / 과잉 점검
 
-**판정: 반영 OK** (실행 순서·책임자 모두 명시. 파일명 사소 불일치는 observation)
+architecture.md "Phase 2.1" 범위 (L1083):
+> Theme 모델 + DB 마이그레이션 + 기본 CRUD API + 화면 4 + 화면 5 정규화 차트(가격만)
 
-### 6. golden baseline 갱신 시 git diff/commit message 가이드
+task-board L228-260 매핑:
 
-**요구**: 각 description 에 git diff 변경 양상 (청산 trade 추가 / time 필드 변경 / 가격 보정 변동) + 회귀 의도 commit message 명시.
+| Phase 2.1 항목 | 매핑 태스크 |
+|---|---|
+| Theme 모델 (DB) | TASK-300 |
+| DB 마이그레이션 | TASK-300 |
+| Theme 도메인 entity + service | TASK-301 |
+| Repository | TASK-302 |
+| 기본 CRUD API | TASK-303 |
+| 정규화 도메인 | TASK-304 |
+| 정규화 차트 API | TASK-305 |
+| Frontend client | TASK-306 |
+| 화면 4 | TASK-307 |
+| 화면 5 정규화 차트 (가격만) | TASK-308 |
+| 격리 정적 검증 | TASK-309 |
+| e2e 회귀 | TASK-310 |
+| C5 후속 | TASK-311 |
 
-**반영 확인**:
-- TASK-211 (L108): "**회귀 의도 commit msg**: 'TASK-211: filter fail 시 보유 청산 추가 — 골든 trades 청산 패턴 추가됨'" — 명시.
-- TASK-212 (L109): "**회귀 의도 commit msg**: 'TASK-212: TradeFill.settlement_date 추가 — trades 시간 필드가 settlement_d 로 변경'" — 명시.
-- TASK-214 (L111): "**회귀 의도 commit msg**: 'TASK-214: yfinance auto_adjust=True — 가격이 split/dividend 소급 보정된 값으로 변경'" — 명시.
-- TASK-215 (L112): git diff 변경 양상 검증 명시 ((a) 청산 trade 신규 추가, (b) trade time 필드가 settlement_date 로 변경, (c) 가격 값이 분할 보정 값으로 변경) + commit message "TASK-215: golden baseline 재생성 — TASK-211(청산) + TASK-212(time) + TASK-214(가격보정) 누적 반영" 명시.
+→ **Phase 2.1 범위 100% 커버**.
 
-**판정: 반영 OK** (4 태스크 모두 일관된 git diff/commit msg 가이드)
+**Phase 2.2/2.3/2.4 항목이 섞였는지 검사**:
 
-## 추가 검증
+- 시가총액 수집 (`PykrxMarketCapSource` + cron + market_cap_weighting) → Phase 2.2 임에도 **TASK-300 이 `asset_market_cap` 테이블 생성을 포함**.
+  - 분석: 테이블 생성 자체는 Phase 2.1 마이그레이션에서 미리 만들어둬도 무방 (DDL only, 데이터 흐름 0). market_cap weighting placeholder 도 TASK-304 가 "Phase 2.2 placeholder (NotImplementedError)" 로 명시 → **일관됨 (선반영, 비-과잉)**.
+- 관심도 (NaverDataLab/GoogleTrends) → Phase 2.3 임에도 **`.env.example` 에 키 빈칸 선반영**.
+  - 분석: architecture.md L977 + .env.example 끝 명시 "Phase 2.3 시작 직전 사용자 발급 후 채움" + TODO 코멘트. **정책 일관**.
+- 테마 변경 이력 분석 도구 → Phase 2.4. task-board 에 0 hit.
 
-### TASK-215 Tester 할당 적절성
+→ **Phase 2.2/2.3 선반영은 정책 일치 + Phase 2.4 항목 0**. 과잉 없음.
 
-- TASK-215 의 본질은 "9 케이스 fixture regenerate + git diff line-by-line 검증" — 코드 변경 없이 테스트 baseline 갱신 + 회귀 의도 검증.
-- 골든 스냅샷 변경 의도 검증은 Tester 의 본업 (회귀 catch). Coder 가 자기 코드 변경을 정당화하는 것보다 Tester 가 독립 검증이 적합.
-- **판정: Tester 할당 적절**
+### F. 정책 충돌 RESOLVED 일관성
 
-### TASK-216 Execution=user 적절성
+architecture.md L19 / L93 / L520 / L740 갱신 ↔ L1069-1077 충돌 표 ↔ CLAUDE.md 미션 일관성:
 
-- 본질: ① DB 직접 SQL DELETE ② backfill API/scheduler trigger ③ DB SELECT 검증 — 모두 운영 액션 (코드 변경 0).
-- DB 직접 조작은 Coder 자율 실행 시 환경 의존성·돌이킬 수 없는 위험 (asset_id=56 데이터 영구 삭제) 존재. 사용자 명시 동의 필요.
-- 자산 ID 56 이 실제 BTC 인지 사용자 환경 확인 필요 (다른 환경에서는 다른 ID 일 수 있음).
-- **판정: Execution=user 적절**
+| 충돌 | L1069 표 결정 | architecture 본문 | CLAUDE.md | 일관 |
+|---|---|---|---|---|
+| C1 | RESOLVED — ETF/지수 권고, Phase 2 STOCK 예외 + 생존편향 경고 | L19 정확 매핑 | "Phase 1 백테스팅 / Phase 2 관찰·탐색 트랙" 명시 | PASS |
+| C2 | RESOLVED — `asset_type` 두 위치 STOCK 추가 | L93 + L520 STOCK 추가 + 설명 | 직접 언급 없음 | architecture 본문은 PASS, **TASK-300 의 코드 위치 카운트는 NEEDS_REVISION (A 항)** |
+| C3 | RESOLVED — Phase 1/2 트랙 분리, 절대 원칙 1·5 양 트랙 | architecture L832: "V3 절대 원칙 (UI 폼 우선, 한국어, 진행 가시화 등) 은 동일 적용" — enumerate 만, "1·5 만" 직접 명시 없음 | CLAUDE.md L7: "절대 원칙 1·5 는 동일 적용되지만 2·3·4 는 백테스팅 트랙 전용" — 명확 | architecture 본문이 CLAUDE.md 보다 모호 (권고급 개선, 비-블로커) |
+| C4 | RESOLVED — Phase 2 화면 5개 확장 | L740-743: "Phase 1 화면 3개" + "Phase 2 화면 5개" 명시 | 미언급 (절대 원칙 아님) | PASS |
+| C5 | RESOLVED (정책) — 백테스트 화면 STOCK 경고 토스트, Phase 2.1 후속 별도 태스크 | task-board TASK-311 (Phase 2.1 후속) 분리 | 미언급 | PASS |
 
-### 실행 순서 권고와 의존성 일관성
+### G. 추가 검증 — 모델 무결성
 
-| 권고 순서 | task-board Depends On | 일관성 |
-|-----------|----------------------|--------|
-| 순차 1: TASK-212 → TASK-211 | TASK-211 Depends On = `TASK-212` | OK |
-| 순차 2: TASK-213 → TASK-214 | TASK-214 Depends On = `TASK-213` | OK |
-| 마지막: TASK-211/212/214 → TASK-215 | TASK-215 Depends On = `TASK-211, TASK-212, TASK-214` | OK |
-| 사용자 액션: TASK-213 → TASK-216 | TASK-216 Depends On = `TASK-213` | OK |
-| TASK-212 = 시작점 (선행 없음) | TASK-212 Depends On = `-` | OK |
-| TASK-213 = 시작점 (선행 없음) | TASK-213 Depends On = `-` | OK |
+- `backend/app/models/asset.py:37` `asset_type` 컬럼 = `String(32)` (NO ENUM) → TASK-300 의 "Python 정적 Literal 변경, DB ENUM 미사용이므로 alembic 본문 변경 없음" 주장 정확. STOCK 값 삽입은 String column 에 즉시 가능.
+- TASK-300 의 "`__init__.py` re-export 갱신" → 실측 `backend/app/models/__init__.py` 존재. 신규 `theme.py` + `market_cap.py` 추가 시 re-export 패턴 따름. DoD 에 명시되어 있어 PASS.
 
-**판정: 6/6 모두 일관 — 실행 순서 권고와 Depends On 컬럼 완벽 일치**
+---
 
-## 목적성·클린 아키텍처 (재확인)
+## 3. Manager 수정 사항 (NEEDS_REVISION → PASS 조건)
 
-- 6 태스크 모두 architecture.md V3 § "거래 정책" + Quant Lab CLAUDE.md "백테스팅 실거래 반영도 70%" + "비거래일 방어" 원칙 부합.
-- TASK-211/212 = bug (실거래 반영도 위반). TASK-213/214 = bug + 임시처방 박제. TASK-215 = baseline 회귀 검증. TASK-216 = 운영 액션.
-- 클린 아키텍처: domain ↔ data 의존 방향 위반 없음. test 디렉토리는 backend/tests/golden 으로 일관.
+### 필수 (블로커)
 
-## 추후 수정 용이성
+1. **`signal/stock-backtest/task-board.md` TASK-300 본문 — AssetType 동기 위치 카운트**:
+   - 현재: "**AssetType Literal 3곳 동기** ... `backend/app/domain/asset/entity.py:18` + `backend/app/schemas/asset.py:17` + `frontend/lib/api/schemas.ts:38-45`"
+   - 수정 (예시):
+     ```
+     AssetType Literal/Enum 4곳 동기 (mypy/pyright 강제 대상):
+     - backend/app/domain/asset/entity.py:18 (Literal 정의)
+     - backend/app/schemas/asset.py:17 (Literal 정의)
+     - backend/app/data/seed/assets_catalog.py:16 (Literal 정의 — Reviewer 적발)
+     - frontend/lib/api/schemas.ts:38-45 (AssetTypeEnum — z.enum 정의)
+     추가 docstring/주석 정리 (비-블로커): backend/app/api/assets.py:132 description 문자열 + backend/app/models/asset.py:36 comment.
+     ```
 
-- TASK-212 의 `TradeFill.settlement_date` 필드 추가 → 후속 fill 사용처 (Tax/Reporting/UI) 가 그 필드 활용 가능.
-- TASK-213 의 `earliest_available` 추상 메서드 → DataSource Protocol 확장이라 향후 어댑터 (Upbit/한국은행) 일관 적용.
-- TASK-214 의 임시처방 → BLOCKER-003 으로 정공법 (Phase 2) 박제.
-- TASK-215 의 baseline 단일 책임자 → 향후 비슷한 누적 변경 시 동일 패턴 재사용 가능.
+2. **`signal/stock-backtest/task-board.md` TASK-300 DoD (c)**:
+   - 현재: "(c) AssetType Literal 3곳 grep 'STOCK' = 3 hits"
+   - 수정: "(c) AssetType Literal/Enum 4곳 STOCK 추가: `grep -nE 'STOCK' backend/app/domain/asset/entity.py backend/app/schemas/asset.py backend/app/data/seed/assets_catalog.py frontend/lib/api/schemas.ts` = 4 hits 이상"
 
-## 판정
-**PASS**
+3. **`signal/stock-backtest/task-board.md` TASK-303 본문 — 엔드포인트 카운트 모순**:
+   - 현재: "**6 엔드포인트**: ①... ⑧..." (6 ≠ 8 모순)
+   - 수정 (단순): "**8 엔드포인트**: ①... ⑧..."
+   - 또는 (분리): "**themes.py 6 엔드포인트 + assets.py 1 endpoint 추가 (`/assets/{asset_id}/theme_history`) + dependencies.py 1 endpoint 의존성 추가 = 본 태스크 8 라우트 영향**" — DoD (a) 의 "8 엔드포인트 OpenAPI 등록" 과 정합.
 
-판정 사유:
-- 직전 6 수정 요청 모두 task-board.md 에 정확히 반영 (5/6 완벽 일치, 1/6 = 골든 파일명 표기 사소 불일치는 observation 수준).
-- 라인 인용 정확도: TASK-212 의 5 단계 시그니처 변경 명세 (L197/L233/L228/L290/L361/L366/L242) 모두 실측 일치.
-- TASK-215/216 신규 추가가 적절한 책임 분리 (Tester baseline / user 운영 액션).
-- 실행 순서 권고 ↔ Depends On 컬럼 6/6 일관.
-- Manager 가 Coder/Tester 호출 가능 신호.
+### 권고 (비-블로커, 향후 회귀 방지)
 
-## 권장 호출 순서 (Manager 행동 가이드)
+4. **`signal/stock-backtest/task-board.md` TASK-308 DoD 끝에 추가**: "`lib/i18n/ko.ts` 수정 금지 — TASK-307 에서 정의한 `theme.*` namespace 의 sub-key 만 재사용. 신규 차트 라벨이 필요하면 TASK-307 namespace 에 미리 포함시킬 것."
 
-병렬 가능한 첫 라운드:
-1. **Coder TASK-212** (TradeFill 모델 변경) — 시작점, 선행 없음.
-2. **Coder TASK-213** (earliest_available 추상 메서드 + yfinance/pykrx 구현) — 시작점, 선행 없음.
+5. **`signal/stock-backtest/architecture.md` L832** (C3 일관성 강화):
+   - 현재: "V3 절대 원칙 (UI 폼 우선, 한국어, 진행 가시화 등) 은 동일 적용한다"
+   - 권고: "CLAUDE.md 절대 원칙 1·5 (JSON 미노출, 프리셋 제한) 만 동일 적용. 2·3·4 (3요소 전략 / 실거래 70% / 메트릭) 는 백테스팅 트랙 전용 — 본 트랙 무관."
 
-위 둘은 서로 다른 파일 (`domain/trade.py + services/backtest_runner.py` vs `data/sources/* + data/pipeline.py`) 이라 병렬 실행 안전. 각각 별도 report 파일 (`coder-report-TASK-212.md`, `coder-report-TASK-213.md`) 사용 권장.
+6. **`signal/stock-backtest/task-board.md` TASK-309 invariant 3**:
+   - 현재: "`backend/app/services/backtest_runner.py` 안에서 themes 의존 0 hit"
+   - 권고: "`backend/app/services/**` 전체에서 themes 의존 0 hit" — 향후 services/ 새 모듈 추가 시 회귀 방지.
 
-각각 DONE 후:
-3. **Coder TASK-211** (engine 청산) — TASK-212 의 TradeFill.settlement_date 가 도입돼 있어야 함.
-4. **Coder TASK-214** (yfinance auto_adjust=True + pykrx 코멘트) — TASK-213 의 earliest_available 메서드와 같은 파일이라 순차.
+7. **`signal/stock-backtest/task-board.md` TASK-300 DoD (d) — baseline 표현 명확화**:
+   - 현재: "`pytest tests/api/test_api_contract.py` 회귀 0 (기존 5/16 baseline 유지)"
+   - 권고: "Coder 가 호출 직전 `pytest --co -q backend/tests/api/test_api_contract.py` 로 현재 baseline (예상 11 collected) 측정 후 STOCK 추가 후 동일 측정으로 비교 — PASS/FAIL 비율 동일 유지" — "5/16" 의 의미가 11 def 와 정합하지 않음.
 
-3/4 도 서로 독립이라 병렬 가능 (engine vs sources).
+---
 
-마지막:
-5. **Tester TASK-215** (골든 baseline 9 케이스 재생성) — TASK-211/212/214 모두 DONE 후.
-6. **사용자 통지 TASK-216** — TASK-213 DONE 후 Manager 가 사용자에게 manual 전달.
+## 4. PASS 조건
 
-## Manager 에게 전달
+위 **필수 1·2·3 (TASK-300 본문 + DoD c, TASK-303 본문 카운트)** 만 수정하면 **PASS**. 권고 4~7 은 동일 PR 에 포함하면 견고하나 PASS 차단 요소 아님.
 
-- PASS 판정 — Coder 호출 진행 가능.
-- 첫 라운드: Coder TASK-212 + TASK-213 병렬 호출 권장 (위 권장 호출 순서 1·2).
-- 마일스톤 재검증 권장 시점: TASK-211 + TASK-212 + TASK-214 모두 DONE 직후 (TASK-215 진입 전) — 누적 변경의 일관성 독립 검증.
-- 작은 관찰 (NEEDS_REVISION 아님): TASK-215 description 의 골든 파일명 표기 (`scenario_{1,2,3}__{fixed,all,equal}_weight.json`) 가 실제 디렉토리의 파일명 패턴 (`scenario_1_kr_only__fixed_weight.json` 등) 과 다름. Tester 가 실제 디렉토리에서 파일을 직접 listing 해서 작업할 것이라 위험은 낮으나, 다음 회차에서 정확 파일명으로 갱신하면 더 명료.
+수정 후 Manager 가 재호출하면 Reviewer 는 task-board.md L244 / L247 만 재독해 즉시 PASS 판정 가능.
+
+---
+
+## 5. 검증 명령 (Reviewer 가 실행한 실측 명령)
+
+```bash
+ls backend/alembic/versions/                                      # 0001~0004 확인
+grep -rn "down_revision\|revision = " backend/alembic/versions/*.py
+grep -rn "EQUITY_INDEX.*ETF.*BOND" backend frontend/lib            # AssetType 5곳 적발
+wc -l backend/app/data/asset_repository.py \
+     backend/app/data/repositories/backtest_repository.py \
+     backend/app/api/assets.py                                     # 163/273/268 일치
+ls backend/app/domain/                                            # themes/ 부재
+find frontend -path '*themes*' -not -path '*/node_modules/*'      # 0 hit
+ls backend/app/models/                                            # _base.py 존재
+grep -rcE "    def test_|^def test_" backend/tests/regression/*.py # 50 total
+ls backend/tests/golden/snapshots/                                # 9 JSON
+grep -n "11/11" signal/stock-backtest/validation-report.md        # 11/11 확인
+ls backend/tests/architecture/                                    # 부재 (신규)
+ls backend/app/services/                                          # backtest_runner.py, data_loader.py
+find . -name dependencies.py                                      # backend/app/dependencies.py
+find frontend/components -name "UniverseSelector*"                # 존재
+```
+
+— Reviewer Agent
+
+---
+
+## r2 (2026-05-12, NEEDS_REVISION → PASS 재검증)
+
+### 1. 판정 요약
+
+**PASS** — r1 의 블로커 3건 모두 정확히 해소되었고, 권고 4 / 6 도 반영되었다. 미반영 권고 2 (architecture.md L832 명확화) 는 CLAUDE.md L8 본문에서 적용 범위가 이미 정확히 박혀 있으므로 Manager 의 보류 판단이 합리적이다. Coder 가 **TASK-300 부터 시작 가능**.
+
+### 2. r2 검증 결과 — 항목별 (재실측 + diff 검증)
+
+#### A. 블로커 3건 해소 확인
+
+| 블로커 | r2 수정 위치 | 실측 인용 | 판정 |
+|---|---|---|---|
+| ① TASK-300 본문 "Literal 3곳" → "4곳" | task-board.md L238 + L245 | L238: "`AssetType` Literal **4곳** 동기 필요 (Reviewer 2026-05-12 NEEDS_REVISION 반영): `backend/app/domain/asset/entity.py:18`, `backend/app/schemas/asset.py:17`, `backend/app/data/seed/assets_catalog.py:16`, `frontend/lib/api/schemas.ts:38-45` (`AssetTypeEnum`)" — 4 위치 전부 명시. L245: "**AssetType Literal 4곳 동기** ... 4 위치: ① ... ② ... ③ ... ④ ..." 동일 4 위치 번호 부여 | PASS |
+| ② TASK-300 DoD (c) "3 hits" → "4 hits 이상" + grep 명령 | task-board.md L245 DoD (c) | "(c) `grep -rn "STOCK" backend/app/domain/asset/entity.py backend/app/schemas/asset.py backend/app/data/seed/assets_catalog.py frontend/lib/api/schemas.ts` 에서 "STOCK" Literal 멤버 등장 **4 위치 모두**" — 구체 grep 명령 + "4 위치 모두" 표현 (3 hits 라는 carry-over 카운트 부재) | PASS |
+| ③ TASK-303 본문 "6 엔드포인트" + DoD (a) "8 엔드포인트" 모순 | task-board.md L248 | 본문 "**8 엔드포인트** (Reviewer 2026-05-12 적발 — 본문 "6" → "8" 정정): ①... ⑧..." + DoD (a) "**8 엔드포인트** OpenAPI 등록" — 본문 카운트 + DoD 카운트 + ①~⑧ 8개 enum 모두 일관 (8) | PASS |
+
+**추가 점검**: `grep -nE '"STOCK"\|'\''STOCK'\''' projects/stock-backtest/backend/app projects/stock-backtest/frontend/lib` → 4 위치 모두 **STOCK 부재** (models/backtest.py:77 / repositories/backtest_repository.py:81 은 `market_mode` 컬럼 / 변수로 AssetType 와 무관, TASK-300 동기 대상 4 위치는 정확히 STOCK 부재 상태 — Coder 가 추가하면 4 hits 발생). 실측 일치.
+
+#### B. 권고 반영 일관성
+
+| 권고 | r2 수정 위치 | 실측 인용 | 판정 |
+|---|---|---|---|
+| 권고 1 (TASK-308 ko.ts 수정 금지 명시) | task-board.md L253 본문 + DoD (d) | 본문: "**충돌 방지** (Reviewer 권고 2026-05-12): `lib/i18n/ko.ts` 의 `theme.*` namespace 추가는 **TASK-307 전담** — 본 태스크는 ko.ts 의 기존 키 사용만 허용 ... 병렬 last-write-wins 방지." + DoD (d): "`lib/i18n/ko.ts` 수정 라인 = 0 (충돌 방지 정책)" — TASK-307 (`theme.*` namespace 신규) 와 책임 경계 명확 분리 | PASS |
+| 권고 3 (TASK-309 invariant ③ services 전체 일반화) | task-board.md L254 | "③ `backend/app/services/**` 전체 (현재 `backtest_runner.py` + `data_loader.py`, 향후 추가될 모듈 포함) 에서 `from app.domain.themes` 또는 `from app.data.theme_repository` import 0 hit (Reviewer 권고 2026-05-12 — 단일 파일 → services 전체 일반화)" — services/** 일반화 + theme_repository import 도 추가 검사 (data 레이어 격리까지 박제) | PASS |
+| 권고 4 (TASK-300 DoD (d) baseline "5/16" 모호 → 명확화) | task-board.md L245 DoD (d) | "`pytest tests/api/test_api_contract.py` 회귀 0 (현 baseline: 5 PASS + 6 SKIP, `def test_` 정의 11건 — DB-의존 SKIP 은 BLOCKER-001 잔재)" — "5/16" 의 모호한 표현이 "5 PASS + 6 SKIP" + `def test_` 11 + SKIP 원인 (BLOCKER-001) 까지 명시되어 측정 가능 | PASS |
+
+**미반영 권고 2 (architecture.md L832 명확화) 의 합리성 검증**:
+
+- CLAUDE.md L8 (실측): "절대 원칙 1·5 (JSON 미노출, MVP 프리셋 제한) 는 동일 적용되지만 2·3·4 (3요소 전략, 실거래 70%, 메트릭) 는 백테스팅 트랙 전용." — **적용 범위 1·5 vs 2·3·4 가 본문에 명시적으로 박혀 있음**.
+- architecture.md L832 (실측): "V3 절대 원칙 (UI 폼 우선, 한국어, 진행 가시화 등) 은 동일 적용한다." — 표현은 모호하지만 "동일 적용" 의 범위는 CLAUDE.md L8 + L1069-1077 결정 표 (C3 RESOLVED) 가 권위적 출처.
+- **판단**: Manager 의 "CLAUDE.md 본문 명시 + L1069 결정 표 박제 → architecture.md L832 단독으로는 추가 명확화 불필요" 주장 합리적. Coder 가 L832 단독을 읽어도 같은 페이지의 결정 표로 즉시 disambiguate 가능. 단독 PR 가치 < diff 비용. **합의 + 비-블로커 보류 OK**.
+
+#### C. 신규 위험 점검 (6 수정 → 의존성 그래프 / 다른 태스크 영향)
+
+| 영향 검사 항목 | 결과 | 판정 |
+|---|---|---|
+| 의존성 그래프 (L266-289) 변경 여부 | 그래프 L266-279 + 병렬 계획 L281-289 — diff 0 (블로커 수정은 본문/DoD 만 갱신, depends_on 컬럼 무변경) | PASS |
+| TASK-306 (Frontend Zod) 의 "AssetTypeEnum STOCK 추가" — TASK-300 동기 위치 4곳 중 frontend/lib/api/schemas.ts:38-45 와 일관 | L251: "① `AssetTypeEnum` L38-45 에 `"STOCK"` 추가 (TASK-300 백엔드 동기)" — 동일 위치 + "TASK-300 백엔드 동기" 명시. 4곳 중 4번째 위치 (frontend) 의 동기 책임이 TASK-306 으로 위임됨 (백엔드 3곳은 TASK-300, frontend 1곳은 TASK-306). 책임 경계 명확 | PASS |
+| TASK-307 의 ko.ts namespace 신규 책임 vs TASK-308 의 수정 금지 정책 일관 | TASK-307 L252 (i18n/ko.ts theme.* namespace 신규 — DoD (b) 한국어 라벨 grep 5건 이상) ↔ TASK-308 L253 DoD (d) "수정 라인 = 0" — TASK-307 이 모든 신규 키를 사전 정의하고 TASK-308 은 reuse 만. **last-write-wins 방지** 정책으로 병렬 실행 가능 (5차 병렬, L285) | PASS |
+| TASK-309 services/** 일반화로 향후 `app/services/` 신규 모듈 추가 시 회귀 자동 차단 | invariant ③ 가 `from app.domain.themes` + `from app.data.theme_repository` 양쪽 import 0 hit 강제 — Phase 2.2 (market_cap 수집 서비스) 추가 시 위반 검출됨 | PASS (회귀 방지 강화) |
+| TASK-303 의 "8 엔드포인트" 중 ⑧ (`GET /api/assets/{asset_id}/theme_history`) 은 assets.py 라우터에 append → TASK-305 (themes.py 차트 2 endpoint) 와 파일 충돌? | TASK-305 L250 본문: "`backend/app/api/themes.py` (TASK-303 후) 에 차트 endpoint 2건 추가" — themes.py 동일 파일이지만 **TASK-303 → TASK-305 순차** (의존성 L283 "3차 (TASK-302 + TASK-304 후): TASK-303 → TASK-305 순차 (themes.py 동일 파일)") 명시. ⑧ 는 assets.py append 라 themes.py 와 무관. 순차 + 파일 분리로 충돌 0 | PASS |
+
+### 3. r2 종합 판정
+
+- **블로커 3건 100% 해소** (TASK-300 본문 + DoD c, TASK-303 본문/DoD a 일관)
+- **권고 4건 중 3건 반영** (1 ko.ts 충돌 / 3 services 일반화 / 4 baseline 명확화)
+- **미반영 권고 1건** (architecture.md L832) — CLAUDE.md L8 + L1069 결정 표가 권위 → 보류 합리
+- **신규 위험 0** (의존성 그래프 / 병렬 계획 / 책임 경계 모두 일관)
+
+**최종 판정: PASS**
+
+Manager 는 **TASK-300 부터 Coder 호출** 가능. r2 추가 수정 불필요.
+
+### 4. PASS 조건 charter (다음 라운드 호출 시 참조)
+
+- TASK-300 코드 수정 후 다음 grep 으로 4 위치 동기 확인:
+  ```bash
+  grep -nE '"STOCK"|'\''STOCK'\''' \
+    projects/stock-backtest/backend/app/domain/asset/entity.py \
+    projects/stock-backtest/backend/app/schemas/asset.py \
+    projects/stock-backtest/backend/app/data/seed/assets_catalog.py \
+    projects/stock-backtest/frontend/lib/api/schemas.ts
+  # 기대: 4 hits (각 파일 정확히 1개)
+  ```
+- TASK-303 themes.py + assets.py append 후 OpenAPI 등록 검증:
+  ```bash
+  curl -s http://localhost:8000/api/openapi.json | jq '.paths | keys[] | select(test("theme"))'
+  # 기대: 7 keys (themes 6 라우트 + assets/{id}/theme_history 1) — themes.py 의 ① POST 와 ② GET /api/themes 가 동일 path 다른 method 이므로 path key 단위로는 7개
+  ```
+
+— Reviewer Agent (r2)

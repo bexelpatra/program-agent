@@ -1,12 +1,12 @@
 {
   "aborted": false,
-  "cagr": 0.211192,
+  "cagr": 0.210478,
   "final_equity": 25971.6944,
-  "mdd": -0.000212,
+  "mdd": -0.001399,
   "num_equity_points": 1258,
   "num_fills": 79,
   "scenario": "scenario_3_us_crypto",
-  "sharpe": 21.185014,
+  "sharpe": 21.015375,
   "strategy": "all_weather",
-  "win_rate": 0.897375
+  "win_rate": 0.896579
 }

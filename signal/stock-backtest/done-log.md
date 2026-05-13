@@ -377,3 +377,119 @@ V3 Phase 1 MVP 완료 태스크 append-only 로그.
 
 
 
+
+### TASK-244 (DONE) - 2026-05-07T00:30
+- title: 엔진 EOD equity 기록 시점 결함 수정 — 큐잉 패턴으로 D+1 settlement 분리 (Coder)
+- assignee: coder
+- summary: `engine.py` 메인 루프를 `pending_rebalance` 큐잉 패턴으로 재구성 — D iteration 안에서 시그널/체결/EOD 평가를 모두 처리하던 회계 결함을 ① settlement (어제 시그널을 오늘 가격으로) → ② EOD equity 기록 → ③ signal 큐잉 3단계로 분리. helper 3개 추출 (`_settle_pending_rebalance`, `_record_eod_equity`, `_generate_signal_for_day`) + `_PendingRebalance` dataclass. `next_trading_day` import + 호출 1곳 제거. validation harness L1~L3 expected 식 갱신 (case_l1.py C1~C5 expected_initial_equity = pure cash, case_l2.py C6 docstring hand-trace 전면 재작성, C8 docstring 갱신). case_l3.py / _helpers.py 변경 없음 (path-independent invariants / `closed_form_initial_buy` spec 보존).
+- files:
+  - projects/stock-backtest/backend/app/domain/engine.py (수정, 277줄 변동)
+  - projects/stock-backtest/backend/scripts/validation/case_l1.py (수정, 65줄 변동)
+  - projects/stock-backtest/backend/scripts/validation/case_l2.py (수정, 116줄 변동)
+  - signal/stock-backtest/coder-report-TASK-244.md (신규)
+  - signal/stock-backtest/reviewer-report-TASK-244.md (신규, r2 PASS)
+- smoke: `python -m scripts.validation.run_all --skip-opus` → **9/9 PASS** (L1 5/5 + L2 3/3 + L3 1/1). L4 정성 평가 + 11/11 공식 재달성은 TASK-244B (Tester) 분담.
+- DoD: (a)~(e) 모두 PASS. tests/ 디렉토리 미수정 (Tester 분담 정책 준수).
+- 분담: TASK-244B (Tester) — `tests/domain/test_engine.py` 신규 클래스 4 메소드 + 골든 baseline 9 재생성 + regression 3 파일 0 회귀 + run_all 11/11 공식 재달성.
+- commit: 미수행 (Manager 가 TASK-244 + TASK-244B 통합 commit 결정 시 처리).
+
+### TASK-244B (DONE) - 2026-05-07T01:00
+- title: TASK-244 검증 — 단위 테스트 + 골든 baseline + 회귀 (Tester 분담)
+- assignee: tester
+- severity: bug (Issue 1 — case_l4.py fixture stale, 후속 TASK-244C)
+- summary: TASK-244 (engine.py 큐잉 패턴) 검증. DoD (a) `TestEodEquityAccountingTiming` 4 신규 메소드 PASS, DoD (b) regression 50/50 PASS, DoD (c) 골든 9 baseline 재생성 + 임계값 검증 (부호 9/9 + final_equity 9/9 + cagr/win_rate 18/18 PASS, sharpe 6 + mdd 8 ESCALATE — baseline regime change), DoD (d) `run_all.py` 10/11 (L1 5/5 + L2 3/3 + L3 1/1 + L4 1/2). L4 S1 SUSPECT 는 코드 결함이 아닌 **`scripts/validation/case_l4.py` L48-62 fixture 가 TASK-244 fix 이전 엔진 출력으로 박제** — Opus 가 정확히 catch. Tester 영역 (`tests/`) 외라 본 태스크 미수정.
+- files:
+  - projects/stock-backtest/backend/tests/domain/test_engine.py (수정, `TestEodEquityAccountingTiming` 신규 클래스 + 헬퍼 3종)
+  - projects/stock-backtest/backend/tests/golden/snapshots/*.json (9 파일 baseline 재생성)
+  - signal/stock-backtest/tester-report-TASK-244B.md (신규)
+  - signal/stock-backtest/reviewer-report-TASK-244B.md (r2 PASS)
+- 후속:
+  - TASK-244C (Coder): case_l4.py L48-62 fixture 갱신 → 11/11 PASS 재달성 (severity=bug 자동 등록).
+  - ESCALATE: 골든 baseline 6 sharpe + 6 mdd 케이스 임계값 (50%) 초과 — TASK-244 fix 의 의도된 효과 (옛 sharpe 1000+ variance≈0 인플레이션 / mdd 0 = Day 0 post-trade BUG 부산물). 사용자 confirm 필요.
+
+### TASK-300 (DONE) - 2026-05-12
+- title: alembic 0005 — themes / theme_assets / asset_theme_history + asset_market_cap 테이블 + AssetType Literal 'STOCK' 추가 (Phase 2.1 첫 태스크)
+- assignee: coder
+- summary: 4 테이블 신규 (themes/theme_assets/asset_theme_history/asset_market_cap) + SQLAlchemy 모델 2 파일 (theme.py, market_cap.py) + AssetType Literal 4곳 동기 (entity.py / schemas/asset.py / seed/assets_catalog.py / schemas.ts). alembic 0005 head=0005_theme_tables 직선, history 0001~0005 정상. DB ENUM 미사용이므로 alembic 본문은 DDL 만 (Literal 변경은 Python/TS 정적). Reviewer r2 PASS 직후 Coder 호출.
+- files: backend/alembic/versions/0005_theme_tables.py (신규), backend/app/models/{theme.py, market_cap.py, __init__.py}, backend/app/domain/asset/entity.py, backend/app/schemas/asset.py, backend/app/data/seed/assets_catalog.py, frontend/lib/api/schemas.ts
+- DoD: (a) alembic upgrade head 성공, (b) history 직선 + heads=0005, (c) STOCK Literal 4 위치 모두 등장, (d) test_api_contract 회귀 0 (5F/12P/4S — 신규 FAIL 0), (e) npm run build PASS
+- 후속: TASK-301 (도메인 entity + Repository Protocol + service) 진행
+
+### TASK-301 (DONE) - 2026-05-12
+- title: Theme 도메인 entity + Repository Protocol + service (history 자동 append 트랜잭션 박제)
+- assignee: coder
+- summary: `backend/app/domain/themes/` 4 파일 (entity / repository / service / __init__) 신규. ThemeRepository Protocol 10 메서드 (요구 9 + append_history — 트랜잭션 박제 위해 필수, 근거 report 명시). UnitOfWork Protocol 채택 (commit/rollback). service 단위 테스트 5/5 + frozen smoke 1 PASS, 기존 tests/domain/ 44 PASS 회귀 0.
+- files: backend/app/domain/themes/{__init__.py, entity.py, repository.py, service.py}, backend/tests/domain/themes/test_theme_service.py
+- DoD: (a) 도메인 순수성 grep banned imports 0 hit, (b) Protocol 10 메서드 + 3 frozen dataclass, (c) service 단위 테스트 5/5 PASS, (d) tests/domain/ 44 회귀 0, (e) import smoke PASS
+- 핵심 결정: Repository 가 트랜잭션 인지하지 않고 UnitOfWork(Protocol commit/rollback) 가 service 에 주입 — TASK-302 SqlThemeRepository 가 SQLAlchemy Session 어댑터로 UoW 구현
+- 후속: TASK-302 (SqlThemeRepository) + TASK-304 (normalization) + TASK-309 (격리 정적 검증) 병렬 진행
+
+### TASK-302 / TASK-304 / TASK-309 (병렬 DONE) - 2026-05-12
+
+3 태스크 동시 호출 (Reviewer r2 PASS 후 의존성 그래프 2차 병렬 단계). 파일 충돌 0.
+
+- **TASK-302** (coder, SqlThemeRepository): `backend/app/data/theme_repository.py` 신규 — SqlThemeRepository + SqlAlchemyUnitOfWork (선택 A 단일 파일, thin wrapper). 통합 테스트 6 PASS (5 핵심 + 1 UoW 보조). isinstance(repo, ThemeRepository) PASS. 회귀 baseline 동일 유지. `soft_delete_theme` 는 alembic 0005 의 themes.deleted_at 부재로 활성 멤버 일괄 종료만 보장 (themes row 보존). `WHERE removed_at IS NULL` 명시로 부분 인덱스 트리거. observation: NOW() 트랜잭션 고정 특성으로 "재추가" 시나리오 1건 제거.
+- **TASK-304** (coder, normalization): `backend/app/domain/themes/normalization.py` 신규 — 4 함수 (rebase_series / rebase_multi_series / aggregate_equal_weighted / compute_theme_aggregate). 8 단위 테스트 PASS. 첫 유효값=0 시 ValueError, 내부 연산은 float64 (base_value 만 Decimal). market_cap weighting 본체 구현 (Phase 2.2 활성화 예정).
+- **TASK-309** (tester, 격리 정적 검증): `backend/tests/architecture/test_no_cross_import.py` + `__init__.py` 신규. 3 invariant PASS (themes→backtest 0 hit / backtest→themes 0 hit / services→themes/theme_repository 0 hit). 출력 형식 검증을 위해 임시 위반 1줄 삽입→원복. **발견 (환경)**: Manager 가 Coder 호출 시 명시한 venv 경로 `projects/stock-backtest/backend/.venv/bin/python` 가 실제로는 `projects/stock-backtest/.venv/bin/python` 위치 — 향후 Coder/Tester prompt 정정 필요.
+- 회귀 영향: 없음 (3 태스크 합산).
+
+### TASK-303 (DONE) - 2026-05-12
+- title: Theme API 라우터 (CRUD + asset 추가/제거) — 8 엔드포인트
+- assignee: coder
+- summary: 신규 3 파일 (`schemas/theme.py` + `api/themes.py` + `tests/api/test_themes.py`) + 갱신 4 파일 (`api/assets.py` theme_history endpoint / `dependencies.py` get_theme_repo + get_theme_uow / `api/__init__.py` + `main.py` include_router). 8 endpoint OpenAPI 등록, 5 단위 테스트 PASS, 기존 API 회귀 0, frontend build PASS, 도메인→API import 0 hit. schemathesis fuzz 대응 위해 endpoint 별 4xx (404/409) 응답을 OpenAPI 에 명시 추가.
+- files: backend/app/{schemas/theme.py, api/themes.py, api/assets.py (theme_history append), api/__init__.py, dependencies.py, main.py}, backend/tests/api/test_themes.py
+- DoD: (a) 8 endpoint OpenAPI 등장, (b) 5 테스트 PASS, (c) 기존 API 회귀 0, (d) npm build PASS, (e) 도메인 격리 0 hit
+- 후속: TASK-305 (정규화 차트 API — 같은 api/themes.py 에 endpoint 2건 추가, 순차 진행)
+
+### TASK-305 (DONE) - 2026-05-12
+- title: 정규화 차트 API (GET /api/themes/{id}/chart + GET /api/themes/compare) — Phase 2.1 backend 마무리
+- assignee: coder
+- summary: `api/themes.py` 에 endpoint 2건 추가 + `schemas/theme.py` 에 스키마 5종 신설 (SeriesPoint/UniverseMeta/ThemeChartResponse/ThemeCompareItem/ThemeCompareResponse). 4 통합 테스트 PASS, OpenAPI 등록 확인, frontend build PASS, 회귀 0. `weighting=market_cap` → 422 + 한국어 graceful (Phase 2.2 활성화 예정).
+- files: backend/app/{api/themes.py (endpoint 2 추가), schemas/theme.py (스키마 5 추가)}, backend/tests/api/test_themes_chart.py
+- DoD: (a) 2 endpoint OpenAPI 등장, (b) 4 테스트 PASS, (c) market_cap 422, (d) 회귀 0, (e) npm build PASS
+- 핵심 발견: FastAPI 라우팅 순서로 `/compare` 가 `/{theme_id}` 보다 **먼저 등록되어야** path 매칭 정확 — 코드 순서 조정 반영.
+- 후속: backend Phase 2.1 endpoint 10건 (CRUD 8 + 차트 2) 완성. 다음 TASK-306 (frontend Zod + client) → TASK-307 + 308 (병렬 화면)
+
+### TASK-306 (DONE) - 2026-05-12
+- title: Frontend Zod 스키마 + API 클라이언트 (Theme CRUD + STOCK enum 동기)
+- assignee: coder
+- summary: 4 파일 갱신 — `lib/api/schemas.ts` (Theme 13 Zod + paginatedResponseSchema 제네릭), `lib/api/client.ts` (api.* 10 메서드 + deleteNoContent 헬퍼), `lib/api/types.ts` (z.infer 12 타입), `lib/api/__tests__/schemas.test.ts` 신규 (8 tests PASS). tsc/build/vitest 모두 PASS. STOCK enum L45 등장 확인.
+- files: frontend/lib/api/{schemas.ts, client.ts, types.ts, __tests__/schemas.test.ts}
+- DoD: (a) tsc 통과, (b) npm build PASS, (c) vitest schemas 3 (실제 8) PASS, (d) STOCK 1 hit, (e) 10 신규 메서드 노출
+- 핵심 결정: Decimal → number coerce (`z.coerce.number()`), `dict[int]` → `record(string)` 직렬화 차이 흡수 — 백엔드 JSON ↔ 프런트 Zod 경계
+- 후속: TASK-307 + TASK-308 (병렬 화면)
+
+### TASK-307 / TASK-308 (병렬 DONE) - 2026-05-12
+
+2 태스크 동시 호출 (Reviewer r2 PASS 후 6차 병렬 단계). ko.ts 책임 분리 정책으로 충돌 0.
+
+- **TASK-307** (coder, 화면 4): `app/themes/page.tsx` + `components/themes/{ThemeList, ThemeEditor, AssetPicker}.tsx` 신규 (7 파일 = 4 + 단위 테스트 3). `lib/i18n/ko.ts` `theme.*` namespace 신설 (`theme.list/editor/delete/assets/detail.*` = 13 키, TASK-308 `theme.detail.*` 도 선반영 — 충돌 방지 정책 준수). AssetPicker 는 UniverseSelector 와 API 표면 차이로 신규 작성. 9 vitest PASS. 권고: `affected_assets`·`active_members` 의 Zod `.default([])` → `.optional()` 전환.
+- **TASK-308** (coder, 화면 5): `app/themes/[theme_id]/page.tsx` + `components/themes/charts/{NormalizedPriceChart, ThemeAggregateChart, ThemeCompareChart}.tsx` + `hooks/useThemeChartData.ts` 신규. tsc + npm build PASS. 10 vitest PASS (DoD 3건 초과). **ko.ts 수정 0 라인** (Reviewer r2 권고 정책 준수). Zod variance 는 `Awaited<ReturnType>` alias 로 우회. recharts jsdom 호환은 ResizeObserver polyfill + ResponsiveContainer stub.
+- 병렬 충돌: 0. TASK-307 의 ko.ts 신설 키가 TASK-308 의 `t('theme.detail.*')` 호출과 정합 (TASK-307 가 detail 키 선반영).
+- 회귀: TASK-307 단독 build 시점에는 TASK-308 미완성으로 Zod variance 차단 — 두 태스크 합쳐 최종 build PASS.
+
+### TASK-310 (DONE) - 2026-05-12
+- title: Phase 2.1 e2e 스모크 + 5 회귀 검증
+- assignee: tester
+- severity: observation (코드 결함 0)
+- summary: e2e `test_theme_flow.py` 7 단계 PASS (테마생성→자산추가x2→차트(rebase=100)→자산제거→history(ADDED+REMOVED)→비교→삭제). 회귀 4/5 PASS — golden 12/12, validation 9/9, regression 50/50, npm build PASS (신규 `/themes` + `/themes/[theme_id]` 라우트 확인). api_contract 신규 1 FAIL (`GET /themes/{theme_id}/chart` id=0 fuzz) 은 기존 fuzz raise-HTTPException 패턴 확장 — 격리 실행 시 PASS, Phase 2.1 회귀 아님 (observation).
+- files: backend/tests/e2e/test_theme_flow.py (신규)
+- 후속: TASK-312 (fuzz 404 패턴 일관화) 등록 — observation 분리 처리, retrospective 진입 전 사용자 결정
+
+### TASK-311 (DONE) - 2026-05-12
+- title: 백테스트 universe + STOCK 자산 선택 시 생존편향 경고 토스트 (C5 후속)
+- assignee: coder
+- summary: `UniverseSelector` add() 시점에 useRef 기반 warned-once flag 로 STOCK 자산 포함 시 한국어 경고 토스트 1회 노출. ko.ts `warning.survivorshipBias` 키 추가. 단위 테스트 2건 PASS (STOCK→1회 / ETF·INDEX→0건), npm build PASS.
+- files: frontend/components/backtest/UniverseSelector.tsx, frontend/lib/i18n/ko.ts, frontend/components/backtest/__tests__/UniverseSelector.test.tsx
+- DoD: (a)~(e) 모두 PASS
+- 후속: Phase 2.1 마무리 — Phase 2.2 (시가총액 수집) / Phase 2.3 (관심도) 진입 결정 사용자 영역
+
+### TASK-244C (DONE) - 2026-05-07T01:30
+- title: case_l4.py fixture 갱신 — TASK-244 큐잉 패턴 정합 (Coder 후속, Tester 발견 bug)
+- assignee: coder
+- summary: TASK-244B 가 발견한 severity=bug (case_l4.py L48-62 fixture stale) 후속 수정. L50 initial_equity (Day 0) literal: $9,747.06 → $10,000.00 (pure cash, 큐잉 패턴 명시). L51 신규: Day 1 equity $9,989.56 (settlement 직후). L52+ (peak/trough/final/MDD/CAGR/Calmar/invariants) 변경 없음. `run_all.py` 출력 = **11/11 PASS** (L1 5/5 + L2 3/3 + L3 1/1 + L4 **2/2**). L4 S1 Opus verdict: SUSPECT → **PLAUSIBLE** 전환 — Opus 가 큐잉 패턴 정합성 인지.
+- files:
+  - projects/stock-backtest/backend/scripts/validation/case_l4.py (수정, L50-L51)
+  - signal/stock-backtest/coder-report-TASK-244C.md (신규)
+- DoD: (a) (b) 모두 PASS.
+- commit: 미수행 (Manager 가 TASK-244 + TASK-244B + TASK-244C 통합 commit 결정 시 처리).

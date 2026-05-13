@@ -9,7 +9,7 @@
  * UI/UX 원칙 1 (JSON 노출 금지) — 사용자는 자산 메타(이름·시장·통화)로
  * 식별, asset_id 는 폼 제출 직전에만 변환되어 백엔드로 전송된다.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { api, ApiError } from "@/lib/api/client";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +48,12 @@ export function UniverseSelector({ value, onChange }: Props) {
   const [results, setResults] = useState<UniverseAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  // TASK-311: STOCK 자산 (Phase 2 테마주 트랙 — 개별주) 이 universe 에
+  // 포함되면 생존편향 (survivorship bias) 위험을 1회 안내. useRef 로 세션
+  // 단위 flag 를 유지해 추가 STOCK 선택 시 토스트 폭주를 방지한다.
+  // (debounce 500ms 대신 "warned-once" 패턴 — 사용자가 STOCK 을 모두
+  // 제거하고 다시 추가하더라도 같은 마운트에서는 1회만 표시.)
+  const survivorshipBiasWarnedRef = useRef(false);
 
   async function runSearch() {
     setLoading(true);
@@ -74,7 +80,19 @@ export function UniverseSelector({ value, onChange }: Props) {
 
   function add(asset: UniverseAsset) {
     if (value.some((a) => a.asset_id === asset.asset_id)) return;
-    onChange([...value, asset]);
+    const next = [...value, asset];
+    onChange(next);
+    // TASK-311: 개별주(STOCK) 가 1개 이상 포함되면 1회 경고.
+    if (
+      !survivorshipBiasWarnedRef.current &&
+      next.some((a) => a.asset_type === "STOCK")
+    ) {
+      survivorshipBiasWarnedRef.current = true;
+      toast({
+        title: ko.warning.survivorshipBias,
+        variant: "destructive",
+      });
+    }
   }
 
   function remove(assetId: number) {

@@ -28,8 +28,21 @@ import type { z } from "zod";
 
 import type {
   AssetSchema,
+  AssetThemeHistoryReadSchema,
   BacktestResultSchema,
+  PaginatedThemesSchema,
+  SeriesPointSchema,
   StrategyDescriptorSchema,
+  ThemeAssetAddSchema,
+  ThemeAssetReadSchema,
+  ThemeChartResponseSchema,
+  ThemeCompareItemSchema,
+  ThemeCompareResponseSchema,
+  ThemeCreateSchema,
+  ThemeDetailSchema,
+  ThemeReadSchema,
+  ThemeUpdateSchema,
+  UniverseMetaSchema,
 } from "./schemas";
 
 // ─── JSON Schema descriptors (pydantic params_schema) ───────────────────
@@ -67,3 +80,22 @@ export interface JsonSchemaObject {
 export type Asset = z.infer<typeof AssetSchema>;
 export type BacktestResult = z.infer<typeof BacktestResultSchema>;
 export type StrategyDescriptor = z.infer<typeof StrategyDescriptorSchema>;
+
+// ─── Theme (Phase 2 — TASK-306) ─────────────────────────────────────────
+//
+// 백엔드 `app/schemas/theme.py` 미러 (schemas.ts). 모든 타입은 z.infer SoT
+// 패턴 (TASK-238 결정) — `Awaited<ReturnType<...>>` 트릭 금지.
+
+export type Theme = z.infer<typeof ThemeReadSchema>;
+export type ThemeCreate = z.infer<typeof ThemeCreateSchema>;
+export type ThemeUpdate = z.infer<typeof ThemeUpdateSchema>;
+export type ThemeDetail = z.infer<typeof ThemeDetailSchema>;
+export type ThemeAsset = z.infer<typeof ThemeAssetReadSchema>;
+export type ThemeAssetAdd = z.infer<typeof ThemeAssetAddSchema>;
+export type AssetThemeHistory = z.infer<typeof AssetThemeHistoryReadSchema>;
+export type SeriesPoint = z.infer<typeof SeriesPointSchema>;
+export type UniverseMeta = z.infer<typeof UniverseMetaSchema>;
+export type ThemeChartResponse = z.infer<typeof ThemeChartResponseSchema>;
+export type ThemeCompareItem = z.infer<typeof ThemeCompareItemSchema>;
+export type ThemeCompareResponse = z.infer<typeof ThemeCompareResponseSchema>;
+export type PaginatedThemes = z.infer<typeof PaginatedThemesSchema>;

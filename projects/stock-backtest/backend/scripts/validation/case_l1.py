@@ -62,11 +62,17 @@ def _initial_equity(cash: dict[str, float], base: str, fx: dict[str, float]) -> 
 def case_c1_spy_bh_flat() -> CaseResult:
     """SPY 100% BH, USD base, 평탄가 100, yearly rebalance.
 
+    EOD equity 회계 (TASK-244 큐잉 패턴):
+        Day 0 EOD = pure cash (시그널만 큐잉, 체결 X) = initial_cash = 10000.
+        Day 1 EOD = settlement 직후 (Day 1 가격) = qty × 100 + cash_after.
+        평탄가이므로 Day 1~N EOD 모두 동일.
+
     오라클 (한 줄 수식):
         qty = floor(10000 / (100 × 1.001 × 1.00005))
         cash_after = 10000 - qty × 100 × 1.001 × (1 + 0.00005)
         equity[end] = qty × 100 + cash_after  (price 평탄)
-        MDD = 0 (price 평탄 → equity 평탄)
+        equity[Day 0] = 10000 (pure cash)
+        MDD = (post-trade equity − 10000) / 10000  (수수료/슬리피지 손실 1회)
     """
     base = "USD"
     period_start = date(2024, 1, 2)
@@ -91,7 +97,7 @@ def case_c1_spy_bh_flat() -> CaseResult:
         base, period_start, period_end, initial_cash, universe, prices, fx, strategy
     )
 
-    # 오라클: 초기 cash 10000, target_value=10000, settlement price=100 (평탄).
+    # 오라클: Day 0 시그널 → Day 1 settlement 가격=100 (평탄).
     qty, _, cash_after = closed_form_initial_buy(
         available_cash_native=10000.0,
         target_value_native=10000.0,
@@ -101,7 +107,10 @@ def case_c1_spy_bh_flat() -> CaseResult:
         fractional=False,
     )
     expected_final_equity = qty * flat_p + cash_after
-    expected_initial_equity = expected_final_equity  # 평탄 → 모든 day 동일
+    expected_initial_equity = 10000.0  # Day 0 EOD = pure cash
+
+    expected_peak = 10000.0  # Day 0 EOD (pure cash) > Day 1+ post-trade
+    expected_mdd = (expected_final_equity - expected_peak) / expected_peak
 
     return CaseResult(
         case_id="C1",
@@ -113,8 +122,8 @@ def case_c1_spy_bh_flat() -> CaseResult:
             check_float("cash_after_buy_USD", run.final_cash_by_ccy.get("USD", 0), cash_after, rel=1e-7),
             check_float("final_equity", run.final_equity, expected_final_equity, rel=1e-6),
             check_float("initial_equity", run.initial_equity, expected_initial_equity, rel=1e-6),
-            check_float("mdd", run.mdd, 0.0, abs_=1e-9),
-            check_float("peak_equity", run.peak_equity, expected_final_equity, rel=1e-6),
+            check_float("mdd", run.mdd, expected_mdd, rel=1e-6),
+            check_float("peak_equity", run.peak_equity, expected_peak, rel=1e-6),
         ],
         notes=[f"qty={qty}", f"cash_after={cash_after:.4f}", f"equity={expected_final_equity:.4f}"],
     )
@@ -155,7 +164,10 @@ def case_c2_kodex_bh_linear() -> CaseResult:
         base, period_start, period_end, initial_cash, universe, prices, fx, strategy
     )
 
-    # 오라클: D+1 = dates[1] (next_trading_day 이 +1 영업일)
+    # 오라클 (TASK-244 큐잉 패턴):
+    #   Day 0 EOD = pure cash 10_000_000 (시그널만 큐잉).
+    #   Day 1 EOD = settlement 가격 p[1] = 35000 + (42000-35000)/(N-1).
+    #   Day k≥1 EOD = qty × p[k] + cash_after (선형 단조증가).
     p_settle = prices_list[1]
     qty, _, cash_after = closed_form_initial_buy(
         available_cash_native=10_000_000.0,
@@ -167,8 +179,13 @@ def case_c2_kodex_bh_linear() -> CaseResult:
     )
     p_final = prices_list[-1]
     expected_final_equity = qty * p_final + cash_after
-    p_initial = prices_list[0]
-    expected_initial_equity = qty * p_initial + cash_after
+    expected_initial_equity = 10_000_000.0  # Day 0 EOD = pure cash
+
+    # MDD: Day 0 = 10M (pure cash, peak), Day 1 = qty × p[1] + cash_after (수수료/슬리피지
+    # 손실로 < 10M = trough). Day k≥1 = qty × p[k] + cash_after 는 p[k] 단조증가라 monotone
+    # 증가. 따라서 MDD = (Day 1 equity - 10M) / 10M (음수, ~수수료+슬립 비율).
+    expected_day1_equity = qty * prices_list[1] + cash_after
+    expected_mdd = (expected_day1_equity - expected_initial_equity) / expected_initial_equity
 
     return CaseResult(
         case_id="C2",
@@ -180,11 +197,12 @@ def case_c2_kodex_bh_linear() -> CaseResult:
             check_float("cash_after_buy_KRW", run.final_cash_by_ccy.get("KRW", 0), cash_after, rel=1e-7),
             check_float("final_equity", run.final_equity, expected_final_equity, rel=1e-6),
             check_float("initial_equity", run.initial_equity, expected_initial_equity, rel=1e-6),
-            check_float("mdd", run.mdd, 0.0, abs_=1e-9),  # 단조증가 → MDD=0
+            check_float("mdd", run.mdd, expected_mdd, rel=1e-6),
         ],
         notes=[
-            f"p_settle(D+1)={p_settle:.4f}, p_final={p_final:.4f}",
+            f"p_settle(Day 1)={p_settle:.4f}, p_final={p_final:.4f}",
             f"qty={qty}, cash_after={cash_after:.2f}",
+            f"day0={expected_initial_equity:.2f}, day1={expected_day1_equity:.2f}",
         ],
     )
 
@@ -224,6 +242,7 @@ def case_c3_btc_fractional_bh() -> CaseResult:
         base, period_start, period_end, initial_cash, universe, prices, fx, strategy
     )
 
+    # 오라클 (TASK-244 큐잉): Day 0 EOD = pure cash 10000, Day 1 EOD = settlement at p[1].
     p_settle = prices_list[1]
     qty, _, cash_after = closed_form_initial_buy(
         available_cash_native=10000.0,
@@ -235,6 +254,13 @@ def case_c3_btc_fractional_bh() -> CaseResult:
     )
     p_final = prices_list[-1]
     expected_final_equity = qty * p_final + cash_after
+    expected_initial_equity = 10000.0  # Day 0 EOD = pure cash
+
+    # MDD: Day 0 = 10000 = peak (수수료/슬립 차감 전).
+    # Day 1 = qty × p[1] + cash_after (commission ≈ 0.1% + slip 0.1% ≈ 0.2% 손실).
+    # Day k≥1 = qty × p[k] + cash_after (p 단조증가). 따라서 MDD = (Day 1 - Day 0) / Day 0.
+    expected_day1_equity = qty * prices_list[1] + cash_after
+    expected_mdd = (expected_day1_equity - expected_initial_equity) / expected_initial_equity
 
     return CaseResult(
         case_id="C3",
@@ -245,7 +271,8 @@ def case_c3_btc_fractional_bh() -> CaseResult:
             check_float("final_qty_btc", run.final_qty_by_asset.get(asset_id, 0), qty, rel=1e-9),
             check_float("cash_after_buy_USD", run.final_cash_by_ccy.get("USD", 0), cash_after, rel=1e-7),
             check_float("final_equity", run.final_equity, expected_final_equity, rel=1e-6),
-            check_float("mdd", run.mdd, 0.0, abs_=1e-9),
+            check_float("initial_equity", run.initial_equity, expected_initial_equity, rel=1e-6),
+            check_float("mdd", run.mdd, expected_mdd, rel=1e-6),
         ],
         notes=[
             f"qty={qty} (fractional 8자리)",
@@ -297,8 +324,8 @@ def case_c4_sixty_forty_bh() -> CaseResult:
         base, period_start, period_end, initial_cash, universe, prices, fx, strategy
     )
 
-    # 오라클: SPY 먼저 buy (insertion order = target_weights 순서),
-    # 그 후 cash 잔량으로 TLT.
+    # 오라클 (TASK-244 큐잉): Day 0 EOD = pure cash 10000, Day 1 EOD = post-init-buy.
+    # SPY 먼저 buy (insertion order = target_weights 순서), 그 후 cash 잔량으로 TLT.
     # 평탄가이므로 settlement price = 100 / 95.
     qty_spy, cost_spy, cash_after_spy = closed_form_initial_buy(
         available_cash_native=10000.0,
@@ -315,6 +342,9 @@ def case_c4_sixty_forty_bh() -> CaseResult:
         slippage_bps=SLIP,
     )
     expected_equity = qty_spy * p_spy + qty_tlt * p_tlt + cash_after_tlt
+    expected_initial_equity = 10000.0  # Day 0 EOD = pure cash
+    # 평탄가 + 1회 매수 → Day 0 = 10000 (peak), Day 1+ = expected_equity (수수료/슬립 손실).
+    expected_mdd = (expected_equity - expected_initial_equity) / expected_initial_equity
 
     return CaseResult(
         case_id="C4",
@@ -326,7 +356,8 @@ def case_c4_sixty_forty_bh() -> CaseResult:
             check_float("qty_tlt", run.final_qty_by_asset.get(tlt_id, 0), qty_tlt),
             check_float("cash_after_USD", run.final_cash_by_ccy.get("USD", 0), cash_after_tlt, rel=1e-7),
             check_float("final_equity", run.final_equity, expected_equity, rel=1e-6),
-            check_float("mdd", run.mdd, 0.0, abs_=1e-9),
+            check_float("initial_equity", run.initial_equity, expected_initial_equity, rel=1e-6),
+            check_float("mdd", run.mdd, expected_mdd, rel=1e-6),
         ],
         notes=[
             f"qty_spy={qty_spy}, qty_tlt={qty_tlt}",
@@ -437,6 +468,9 @@ def case_c5_allweather_bh() -> CaseResult:
         expected_positions_value += qty * settle_prices[aid]
     expected_equity = expected_positions_value + cash
 
+    expected_initial_equity = 100000.0  # Day 0 EOD = pure cash (TASK-244 큐잉)
+    expected_mdd = (expected_equity - expected_initial_equity) / expected_initial_equity
+
     return CaseResult(
         case_id="C5",
         title="AllWeather 5자산 BH USD (yearly)",
@@ -450,7 +484,8 @@ def case_c5_allweather_bh() -> CaseResult:
             check_float("qty_dbc", run.final_qty_by_asset.get(dbc_id, 0), expected_qty[dbc_id]),
             check_float("cash_after_USD", run.final_cash_by_ccy.get("USD", 0), cash, rel=1e-7),
             check_float("final_equity", run.final_equity, expected_equity, rel=1e-6),
-            check_float("mdd", run.mdd, 0.0, abs_=1e-9),
+            check_float("initial_equity", run.initial_equity, expected_initial_equity, rel=1e-6),
+            check_float("mdd", run.mdd, expected_mdd, rel=1e-6),
         ],
         notes=[
             f"qtys={expected_qty}",

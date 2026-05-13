@@ -47,7 +47,8 @@ def _build_s1_inputs() -> tuple[str, str]:
     # 실측 결과 (위 C9 실행 결과 — 검증 완료한 값만).
     output = """
 - num_fills: 1 (init buy)
-- initial_equity (Day 0): $9,747.06 (qty=97 × $100 + cash $47.06; init buy at $102.5 settlement)
+- initial_equity (Day 0): $10,000.00 (pure cash — TASK-244 큐잉 패턴: Day 0 시점에는 어제 시그널이 없어 settlement skip → portfolio = initial_cash)
+- Day 1 equity: $9,989.56 (settlement 직후 — qty=97 × $100 + cash $47.06 결과를 Day 1 EOD 에 반영, commission/slippage 차감)
 - final_equity (Day 60): $12,657.06 USD (cumulative return ≈ +29.86%)
 - equity_curve 길이: 61
 - equity peak: $14,597.06 (idx 20 = 가격 peak $150 일자와 일치)

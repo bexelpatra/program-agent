@@ -1,26 +1,28 @@
-"""백테스트 메인 루프 (모델 A 강제).
+"""백테스트 메인 루프 (모델 A 강제 — D 시그널 → D+1 settlement 큐잉).
 
-architecture.md V3 § "거래 정책" 모델 A (L615-630):
+architecture.md V3 § "거래 정책" 모델 A (L615-630) + § "EOD equity 기록 시점" (L635-648):
 - D 일 종가 → 시그널 판정
-- D+1 일 시가 → 체결
+- D+1 일 시가 → 체결 (실제로는 다음 iteration 의 d 가 D+1)
 - 구조적 차단: prices_until_d = prices_aligned.loc[:d] (D+1 절대 노출 X)
+- D EOD equity = D 시그널 이전 (= 어제 시그널 D-1 이 오늘 D 에 settlement 된 직후)
+  → 사용자 멘탈 모델 / 실거래 정합 (매도 시그널 D EOD = 아직 보유, 매수 시그널 D EOD = 아직 cash).
 
 architecture.md V3 § "백엔드 모듈 분할" L654-666:
 - engine.py 는 백테스트 메인 루프만. 도메인 모델 (Portfolio/Strategy/Trade/Calendar)
   전부 import 만, 자체 정의 금지.
 - 시간 루프 + 시그널 호출 + 리밸런싱 호출 + equity 기록 + 진행률/취소.
 
-루프 시퀀스 (모델 A):
+루프 시퀀스 (큐잉 패턴, TASK-244 fix 후):
 1. trading_days_in_period(base, start, end) → 시간축 D_0, D_1, ..., D_N
-2. 각 D_i 가 rebalance_schedule 에 해당하는 날인지 판정 (_is_rebalance_day)
-3. 해당하면:
-   a. prices_until_d = prices_aligned.loc[:d] (모델 A 차단 — 한 줄로 D+1 노출 0)
-   b. apply_filters_and_allocator(strategy, universe, prices_until_d, signal_date=D_i)
-   c. 체결일 = next_trading_day(base, D_i) = D_{i+1}
-   d. 체결가 = D_{i+1} 종가 (yfinance 일봉 — 시가 미보유 시 종가 fallback)
-   e. execute_rebalance(portfolio, target_weights, ..., settlement_d)
-4. 매 D_i 종료 시 portfolio.equity_in_base 기록
-5. progress_callback / cancel_check 가 비동기 job hook (TASK-062)
+2. 각 iteration d 시작 시:
+   a. (settlement) 어제 큐잉된 pending_rebalance 가 있으면 오늘 d 가격으로 execute.
+   b. (equity) d 가격 + post-settlement portfolio 로 EOD equity 기록.
+      - Day 0 = pure cash (어제 큐잉 없음 → settlement skip → portfolio = initial_cash).
+      - Day k≥1 = 어제 시그널이 오늘 settlement 된 직후 평가.
+   c. (signal) d 가 rebalance_day 면 D 종가 기준 target_weights 산출 → pending 큐잉.
+3. 마지막 iteration 의 큐잉은 다음 iteration 부재로 settlement 안 됨 (실거래 일관성:
+   마지막 영업일 시그널은 다음 영업일 부재라 유효 X).
+4. progress_callback / cancel_check 가 비동기 job hook (TASK-062).
 
 도메인 순수: SQLAlchemy/HTTP/외부 라이브러리 import 금지. pandas 는 시계열 본질 (허용).
 """
@@ -35,7 +37,7 @@ from typing import Callable
 
 import pandas as pd
 
-from app.domain.calendar import next_trading_day, trading_days_in_period
+from app.domain.calendar import trading_days_in_period
 from app.domain.portfolio import Portfolio
 from app.domain.strategy import (
     RebalanceSchedule,
@@ -169,8 +171,120 @@ def _eod_prices_dict(
     return out
 
 
+@dataclass
+class _PendingRebalance:
+    """D 에서 산출된 시그널을 다음 iteration (D+1) settlement 까지 보관하는 큐잉 박스."""
+
+    signal_date: date
+    target_weights: dict[int, Decimal]
+
+
+def _settle_pending_rebalance(
+    pending: _PendingRebalance,
+    portfolio: Portfolio,
+    ctx: BacktestRunContext,
+    settlement_d: date,
+    universe_asset_ids: list[int],
+    fills: list[TradeFill],
+) -> None:
+    """큐잉된 시그널을 settlement_d 가격으로 체결.
+
+    실패 (NonTradingDayError / MissingPriceError / 잔고 부족 등) 는 로그만 — 1회 누락이
+    전체 백테스트 중단 사유는 아님 (TASK-080 골든 테스트에서 정책 검증).
+    """
+    settlement_prices = _eod_prices_dict(
+        ctx.prices_aligned, settlement_d, universe_asset_ids
+    )
+    fx_at_settlement = ctx.fx_rates_to_base.get(
+        settlement_d, ctx.fx_rates_to_base.get(pending.signal_date, {})
+    )
+    try:
+        rebalance_fills = execute_rebalance(
+            portfolio,
+            pending.target_weights,
+            ctx.universe_market_meta,
+            settlement_prices,
+            fx_at_settlement,
+            settlement_d,
+        )
+        fills.extend(rebalance_fills)
+    except Exception as e:
+        _LOG.warning(
+            "rebalance failed at settlement_date=%s (signal=%s): %s",
+            settlement_d,
+            pending.signal_date,
+            e,
+        )
+
+
+def _record_eod_equity(
+    portfolio: Portfolio,
+    ctx: BacktestRunContext,
+    d: date,
+    universe_asset_ids: list[int],
+    equity_curve: list[BacktestEquityPoint],
+) -> None:
+    """D 가격 + 현 portfolio 로 EOD equity 1포인트 기록 (가격/FX 누락 시 skip)."""
+    eod_prices = _eod_prices_dict(ctx.prices_aligned, d, universe_asset_ids)
+    fx_at_d = ctx.fx_rates_to_base.get(d, {})
+    held_asset_ids = list(portfolio.positions.keys())
+    missing_held = [aid for aid in held_asset_ids if aid not in eod_prices]
+    if missing_held:
+        _LOG.debug("skip equity at %s: missing prices for held %s", d, missing_held[:3])
+        return
+    try:
+        equity = portfolio.equity_in_base(eod_prices, fx_at_d)
+        cash_total = portfolio.total_cash_in_base(fx_at_d)
+    except ValueError as e:
+        _LOG.debug("skip equity at %s: %s", d, e)
+        return
+    equity_curve.append(
+        BacktestEquityPoint(time=d, equity=equity, cash_total_in_base=cash_total)
+    )
+
+
+def _generate_signal_for_day(
+    ctx: BacktestRunContext,
+    d: date,
+    portfolio: Portfolio,
+    universe_asset_ids: list[int],
+) -> dict[int, Decimal]:
+    """D 종가까지의 데이터로 target_weights 산출 (look-ahead 0).
+
+    universe 부분집합 invariant 도 함께 검증 — 보유 자산이 universe 외부면 즉시 ValueError.
+    """
+    # 모델 A 구조적 차단: prices_until_d 는 d 까지만 (D+1 절대 노출 X).
+    # 이 한 줄이 look-ahead bias 방어 핵심 — Allocator/Filter 가 prices.tail()
+    # 이상으로 인덱싱해도 D+1 데이터에 도달 불가능.
+    prices_until_d = ctx.prices_aligned.loc[:d]
+
+    # universe 부분집합 invariant (TASK-211): 보유 자산은 항상 universe 부분집합.
+    # 시그널 산출 전에 검사 — 위반은 silent 0 가 아닌 명시적 에러로 catch.
+    held_not_in_universe = [
+        aid
+        for aid in portfolio.positions.keys()
+        if aid not in ctx.universe_market_meta
+    ]
+    if held_not_in_universe:
+        raise ValueError(
+            f"invariant violation at {d}: held assets not in universe: "
+            f"{held_not_in_universe}"
+        )
+
+    # 전략 적용 (필터 AND → allocator).
+    # 빈 dict 도 정상 결과 — strategy.py L154 주석 "cash-only 로 해석".
+    # 보유 포지션이 있으면 trade._classify_orders L191-198 가 전량 매도 sells
+    # 에 추가 → 청산 동작 (TASK-211 회귀 가드).
+    return apply_filters_and_allocator(
+        ctx.strategy,
+        universe_asset_ids,
+        prices_until_d,
+        d,
+    )
+
+
 def run_backtest(ctx: BacktestRunContext) -> BacktestRunResult:
-    """백테스트 메인 루프 (모델 A).
+    """백테스트 메인 루프 (모델 A — D 시그널 → D+1 settlement 큐잉 패턴).
 
     Returns:
         BacktestRunResult — equity_curve / fills / final_portfolio / aborted.
@@ -198,6 +312,12 @@ def run_backtest(ctx: BacktestRunContext) -> BacktestRunResult:
     fills: list[TradeFill] = []
     aborted = False
 
+    # D 시그널을 D+1 settlement 까지 보관하는 큐 (None = 큐잉 비어있음).
+    # 큐잉 패턴 (TASK-244 fix) — D iteration 안에서 시그널/체결/equity 를 모두 처리하던
+    # 기존 흐름이 D EOD 평가에 D+1 가격으로 산 새 포지션을 D 가격으로 평가하는 회계
+    # 결함을 만들어, 큐잉으로 시그널과 체결을 한 iteration 분리.
+    pending_rebalance: _PendingRebalance | None = None
+
     prev_d: date | None = None
     total = len(timeline)
 
@@ -207,119 +327,36 @@ def run_backtest(ctx: BacktestRunContext) -> BacktestRunResult:
             aborted = True
             break
 
-        # 리밸런싱 일자 판정.
-        if _is_rebalance_day(d, prev_d, ctx.strategy.rebalance_schedule):
-            # 모델 A 구조적 차단: prices_until_d 는 d 까지만 (D+1 절대 노출 X).
-            # 이 한 줄이 look-ahead bias 방어 핵심 — Allocator/Filter 가 prices.tail()
-            # 이상으로 인덱싱해도 D+1 데이터에 도달 불가능.
-            prices_until_d = ctx.prices_aligned.loc[:d]
-
-            # 전략 적용 (필터 AND → allocator).
-            # 빈 dict 도 정상 결과 — strategy.py L154 주석 "cash-only 로 해석".
-            # 보유 포지션이 있으면 trade._classify_orders L191-198 가 전량 매도 sells
-            # 에 추가 → 청산 동작 (TASK-211 회귀: 이전엔 if target_weights 분기로
-            # execute_rebalance 호출 자체를 skip 했음 → filter fail 시 청산 누락 버그).
-            target_weights = apply_filters_and_allocator(
-                ctx.strategy,
-                universe_asset_ids,
-                prices_until_d,
-                d,
+        # ① settlement: 어제 큐잉된 시그널을 오늘 d 가격으로 체결.
+        if pending_rebalance is not None:
+            _settle_pending_rebalance(
+                pending_rebalance, portfolio, ctx, d, universe_asset_ids, fills
             )
+            pending_rebalance = None
 
-            # universe 부분집합 invariant (TASK-211): 보유 자산은 항상 universe 부분집합.
-            # universe 가 백테스트 동안 고정 (universe_market_meta 불변), 매수는 universe
-            # 자산만 가능 (apply_filters_and_allocator 가 universe_asset_ids 만 weight
-            # 산출), 매도는 보유 자산만 → 보유 ⊆ universe 구조적 보장.
-            # 빈 target_weights entry path 에서 settlement_prices/asset_meta 가 보유
-            # 자산을 cover 하기 위한 전제 조건. 위반은 silent 0 가 아닌 명시적 에러로 catch.
-            held_not_in_universe = [
-                aid
-                for aid in portfolio.positions.keys()
-                if aid not in ctx.universe_market_meta
-            ]
-            if held_not_in_universe:
-                # 정상 흐름에서는 발생 불가 — 발생하면 universe_market_meta 변조 등
-                # 호출자 버그. silent 진행하지 않고 명시적 에러 (실거래 정합성 원칙).
-                raise ValueError(
-                    f"invariant violation at {d}: held assets not in universe: "
-                    f"{held_not_in_universe}"
-                )
+        # ② equity 기록: post-settlement portfolio + d 가격.
+        # Day 0 = pure cash (큐잉 없었음 → settlement skip → portfolio = initial_cash).
+        # Day k≥1 = 어제 시그널이 오늘 settlement 된 직후 평가.
+        _record_eod_equity(portfolio, ctx, d, universe_asset_ids, equity_curve)
 
-            # 체결일 = D+1 (모델 A). D 가 마지막 거래일이거나 캘린더 미지원이면 스킵.
-            settlement_d: date | None = None
-            try:
-                settlement_d = next_trading_day(ctx.base_currency, d)
-            except Exception as e:
-                _LOG.warning(
-                    "next_trading_day failed at signal_date=%s: %s", d, e
-                )
-
-            if (
-                settlement_d is not None
-                and settlement_d in ctx.prices_aligned.index
-            ):
-                # D+1 종가 기반 체결 (yfinance 일봉만 보유 시 시가 fallback = 종가).
-                # 빈 target_weights 인 경우에도 보유 청산을 위해 호출 — 단, 청산 시
-                # 가격이 누락된 보유 자산은 trade._execute_sells L216-221 의
-                # avg_price fallback 으로 처리 (sell-only 청산 시나리오 방어).
-                settlement_prices = _eod_prices_dict(
-                    ctx.prices_aligned, settlement_d, universe_asset_ids
-                )
-                fx_at_settlement = ctx.fx_rates_to_base.get(
-                    settlement_d, ctx.fx_rates_to_base.get(d, {})
-                )
-                try:
-                    rebalance_fills = execute_rebalance(
-                        portfolio,
-                        target_weights,
-                        ctx.universe_market_meta,
-                        settlement_prices,
-                        fx_at_settlement,
-                        settlement_d,
-                    )
-                    fills.extend(rebalance_fills)
-                except Exception as e:
-                    # 리밸런싱 실패 (NonTradingDayError / MissingPriceError /
-                    # 잔고 부족 등) → 로그만, 루프 계속 (1회 누락이 전체 백테스트
-                    # 중단 사유는 아님 — TASK-080 골든 테스트에서 정책 검증).
-                    _LOG.warning(
-                        "rebalance failed at settlement_date=%s: %s",
-                        settlement_d,
-                        e,
-                    )
-
-        # equity 기록 (D 일 종가 기준).
-        eod_prices = _eod_prices_dict(ctx.prices_aligned, d, universe_asset_ids)
-        fx_at_d = ctx.fx_rates_to_base.get(d, {})
-        try:
-            # 보유 포지션의 가격이 누락된 경우 equity_in_base 가 ValueError → 스킵.
-            held_asset_ids = list(portfolio.positions.keys())
-            missing_held = [
-                aid for aid in held_asset_ids if aid not in eod_prices
-            ]
-            if missing_held:
-                _LOG.debug(
-                    "skip equity at %s: missing prices for held %s",
-                    d,
-                    missing_held[:3],
-                )
-            else:
-                equity = portfolio.equity_in_base(eod_prices, fx_at_d)
-                cash_total = portfolio.total_cash_in_base(fx_at_d)
-                equity_curve.append(
-                    BacktestEquityPoint(
-                        time=d, equity=equity, cash_total_in_base=cash_total
-                    )
-                )
-        except ValueError as e:
-            # FX rate 누락 등 — equity 기록 스킵.
-            _LOG.debug("skip equity at %s: %s", d, e)
+        # ③ signal: d 가 rebalance day 면 target_weights 산출 후 큐잉
+        # (다음 iteration 의 d 가 D+1 = settlement 일).
+        if _is_rebalance_day(d, prev_d, ctx.strategy.rebalance_schedule):
+            target_weights = _generate_signal_for_day(
+                ctx, d, portfolio, universe_asset_ids
+            )
+            pending_rebalance = _PendingRebalance(
+                signal_date=d, target_weights=target_weights
+            )
 
         # progress.
         if ctx.progress_callback is not None:
             ctx.progress_callback((i + 1) / total)
 
         prev_d = d
+
+    # 마지막 iteration 의 시그널은 다음 iteration 부재로 settlement 안 됨 — 실거래
+    # 일관성 (마지막 영업일 시그널은 다음 영업일 부재라 유효 X). architecture.md L646.
 
     return BacktestRunResult(
         equity_curve=equity_curve,

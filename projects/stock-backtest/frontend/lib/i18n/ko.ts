@@ -61,6 +61,13 @@ export const ko = {
     networkFailure: "서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인하세요.",
     contactSupport: "추적 ID:",
   },
+  // TASK-311 (C5 후속): 개별주(STOCK / Phase 2 테마주 트랙) 가 universe
+  // 에 포함될 때 노출되는 1회성 경고. 백테스팅 결과의 낙관 편향 (delisted
+  // 종목 미포함) 위험을 알리고 테마 관찰 트랙을 권유.
+  warning: {
+    survivorshipBias:
+      "개별 주식은 생존편향 위험이 있어 백테스트 결과가 낙관 편향될 수 있습니다 (테마 관찰 추천)",
+  },
   // TASK-094: 진행률 폴링 패널 (in-place, /backtests/new) 와
   // 한국어 에러 메시지 액션 가이드. 기존 backtest.* 키와 의도적으로 분리 —
   // backtest.* 는 폼 라벨, progress.* 는 진행률/취소/완료 흐름 전용.
@@ -128,6 +135,115 @@ export const ko = {
     priceLoading: "최근 가격을 불러오는 중...",
     noPriceData: "가격 데이터 없음 — 백필 진행 중이거나 신규 등록 직후일 수 있습니다.",
     actionHint: "초기 자본을 늘리거나 해당 자산의 비중을 줄이세요.",
+  },
+  // TASK-307: 테마 카탈로그 (화면 4) + TASK-308 화면 5 의 라벨/문구. namespace
+  // 책임은 TASK-307 (병렬 last-write-wins 방지 — task-board L253 충돌 방지 정책).
+  // TASK-308 은 본 키만 사용하고 ko.ts 수정 금지.
+  //
+  // 사용처 (dotted-path index — grep target for DoD):
+  //   theme.list — 카탈로그 목록 화면 (TASK-307)
+  //   theme.editor — create/edit 다이얼로그 (TASK-307)
+  //   theme.delete — 삭제 confirm 토스트 (TASK-307)
+  //   theme.assets — 멤버 종목 + AssetPicker (TASK-307)
+  //   theme.edit — 편집 버튼 (TASK-307)
+  //   theme.detail.title — 상세 화면 헤더 (TASK-308)
+  //   theme.detail.back — 카탈로그 돌아가기 링크 (TASK-308)
+  //   theme.detail.loading — 상세 로딩 (TASK-308)
+  //   theme.detail.notFound — 404 fallback (TASK-308)
+  //   theme.detail.memberTableTitle — 멤버 표 (TASK-308)
+  //   theme.detail.chart — 정규화/합산 차트 라벨 + 옵션 (TASK-308)
+  //   theme.detail.compare — 테마 비교 다이얼로그 + 결과 영역 (TASK-308)
+  //   theme.detail.universe — universe_meta 안내 토스트/배너 (TASK-308)
+  theme: {
+    list: {
+      title: "테마 카탈로그",
+      empty: "아직 테마가 없습니다. 우측 상단 \"새 테마\" 버튼으로 첫 테마를 만들어보세요.",
+      create: "새 테마",
+      memberCount: "종목",
+      createdAt: "생성일",
+      loading: "테마 목록 불러오는 중...",
+      noDescription: "(설명 없음)",
+    },
+    editor: {
+      createTitle: "새 테마 만들기",
+      editTitle: "테마 편집",
+      nameLabel: "테마 이름",
+      namePlaceholder: "예: 정치 테마주, 반도체 장비",
+      descLabel: "설명",
+      descPlaceholder: "테마 설명 (선택)",
+      submit: "저장",
+      submitting: "저장 중...",
+      cancel: "취소",
+      nameRequired: "테마 이름은 필수입니다.",
+      nameTooLong: "테마 이름이 너무 깁니다 (최대 120자).",
+      success: "저장됨",
+      updateSuccess: "테마가 수정되었습니다",
+      createSuccess: "테마가 생성되었습니다",
+    },
+    delete: {
+      action: "삭제",
+      confirm: "정말 이 테마를 삭제하시겠습니까? 멤버 기록은 history 에 보존됩니다.",
+      success: "테마가 삭제되었습니다",
+      submitting: "삭제 중...",
+    },
+    assets: {
+      sectionTitle: "멤버 종목",
+      add: "종목 추가",
+      addSubmit: "선택한 종목 추가",
+      remove: "제거",
+      noteLabel: "메모",
+      notePlaceholder: "선택 — 큐레이션 코멘트",
+      empty: "아직 멤버가 없습니다. 종목 추가 버튼으로 자산을 검색해 추가하세요.",
+      addSuccess: "종목이 추가되었습니다",
+      addingProgress: "추가 중...",
+      removeSuccess: "종목이 제거되었습니다",
+      already: "이미 추가된 종목",
+      pickerSearchLabel: "자산 검색 (심볼 또는 이름)",
+      pickerSearchPlaceholder: "예: SPY, 삼성전자, BTC",
+      pickerEmpty: "검색 결과가 없습니다.",
+      selectedCount: "선택됨",
+    },
+    edit: {
+      action: "편집",
+    },
+    detail: {
+      title: "테마 상세",
+      back: "← 테마 카탈로그",
+      loading: "테마 정보 불러오는 중...",
+      notFound: "테마를 찾을 수 없습니다",
+      memberTableTitle: "멤버 종목 표",
+      chart: {
+        normalize: "정규화 기준",
+        normalizeBase100: "기준 = 100",
+        weighting: "가중치",
+        weightingEqual: "균등",
+        weightingMarketCap: "시가총액",
+        rangeStart: "기간 시작",
+        rangeEnd: "기간 끝",
+        loading: "차트 데이터 불러오는 중...",
+        empty: "차트로 표시할 데이터가 없습니다.",
+        membersTitle: "멤버별 정규화 가격",
+        aggregateTitle: "테마 합산 (가중 평균)",
+      },
+      compare: {
+        button: "다른 테마와 비교",
+        title: "테마 비교",
+        cancel: "닫기",
+        selectPrompt: "비교할 테마를 선택하세요 (최대 5개).",
+        run: "비교 실행",
+        running: "비교 중...",
+        empty: "비교 결과가 없습니다.",
+      },
+      universe: {
+        adjusted: "기간이 자동 조정되었습니다",
+        adjustedStart: "조정된 시작",
+        adjustedEnd: "조정된 끝",
+        reasonStartLater: "일부 자산이 시작일 이후 데이터부터 존재합니다.",
+        reasonEndEarlier: "일부 자산이 종료일 전에 데이터가 끊겼습니다.",
+        reasonNoData: "표시할 데이터가 없습니다.",
+        reasonOk: "기간 적용 완료",
+      },
+    },
   },
 } as const;
 

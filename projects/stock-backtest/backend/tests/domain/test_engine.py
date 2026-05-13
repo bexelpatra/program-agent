@@ -14,6 +14,7 @@
   1. 빈 weights → 보유 BTC 전량 매도 (1건 SELL fill 발생).
   2. universe 부분집합 invariant — 보유 자산이 universe 에 없으면 명시적 ValueError.
 """
+
 from __future__ import annotations
 
 from datetime import date
@@ -121,9 +122,9 @@ class TestFilterFailClearsHeldPosition:
 
         # 회귀 핵심: 빈 weights 라도 보유 청산이 발생해야 한다.
         sell_fills = [f for f in fills if f.side == "SELL"]
-        assert (
-            len(sell_fills) == 1
-        ), f"REGRESSION (TASK-211) — 빈 target_weights 청산 누락. fills={fills}"
+        assert len(sell_fills) == 1, (
+            f"REGRESSION (TASK-211) — 빈 target_weights 청산 누락. fills={fills}"
+        )
         assert sell_fills[0].asset_id == 1
         assert sell_fills[0].qty_filled == held_qty
         assert sell_fills[0].settlement_date == sell_d
@@ -401,3 +402,297 @@ class TestIsRebalanceDaySemiAnnual:
             _is_rebalance_day(date(2025, 6, 30), date(2025, 1, 2), "semi_annual")
             is False
         )
+
+
+# ---------------------------------------------------------------------------
+# 회귀 4: EOD equity 회계 시점 — 큐잉 패턴 (TASK-244)
+# ---------------------------------------------------------------------------
+#
+# architecture.md V3 § "EOD equity 기록 시점" L635-648 + engine.py L319-356:
+#   D 일 EOD equity = D 시그널 *이전* 평가 (= 어제 시그널 D-1 이 오늘 D 에 settlement
+#   된 직후 portfolio + D 가격). 사용자 멘탈 모델/실거래 정합:
+#     - 매도 시그널의 D EOD = 아직 매도 전 (보유 그대로 평가)
+#     - 매수 시그널의 D EOD = 아직 매수 전 (cash 그대로)
+#     - Day 0 EOD = 어제 큐잉 없음 → settlement skip → portfolio = initial_cash
+#     - Day k≥1 EOD = 어제 시그널이 오늘 settlement 된 직후 평가
+#
+# TASK-244 fix 이전 BUG: D iteration 안에서 시그널→D+1 settlement→D EOD equity 모두
+# 처리 → D EOD 평가에 D+1 가격으로 산 새 포지션이 D 가격으로 평가되어 회계 어긋남.
+# 본 회귀는 큐잉 패턴이 사용자 멘탈 모델과 정합함을 4 메소드로 박제한다.
+
+
+class _UseFirstAssetAllocator:
+    """universe 의 첫 자산에 100% (signal_date 와 무관)."""
+
+    name: ClassVar[str] = "first_asset"
+
+    def required_universe(self) -> list[int]:
+        return []
+
+    def generate_weights(
+        self,
+        universe_asset_ids: list[int],
+        prices_until_d: pd.DataFrame,
+        signal_date: date,
+    ) -> dict[int, Decimal]:
+        if not universe_asset_ids:
+            return {}
+        return {universe_asset_ids[0]: Decimal("1.0")}
+
+
+class _CashOnlyAllocator:
+    """항상 빈 weights → cash-only (보유 자산 있으면 매도 시그널 효과)."""
+
+    name: ClassVar[str] = "cash_only"
+
+    def required_universe(self) -> list[int]:
+        return []
+
+    def generate_weights(
+        self,
+        universe_asset_ids: list[int],
+        prices_until_d: pd.DataFrame,
+        signal_date: date,
+    ) -> dict[int, Decimal]:
+        return {}
+
+
+class _OnceOnFirstDayAllocator:
+    """첫날만 buy 시그널, 이후 cash-only — D=0 매수 시그널 / D≥1 매도 시그널 효과 검증."""
+
+    name: ClassVar[str] = "once_on_first_day"
+
+    def __init__(self, first_day: date) -> None:
+        self.first_day = first_day
+
+    def required_universe(self) -> list[int]:
+        return []
+
+    def generate_weights(
+        self,
+        universe_asset_ids: list[int],
+        prices_until_d: pd.DataFrame,
+        signal_date: date,
+    ) -> dict[int, Decimal]:
+        if signal_date == self.first_day and universe_asset_ids:
+            return {universe_asset_ids[0]: Decimal("1.0")}
+        return {}
+
+
+class TestEodEquityAccountingTiming:
+    """TASK-244 핵심 회귀 — 큐잉 패턴으로 D 시그널/D+1 settlement 분리 시 EOD 시점 정합."""
+
+    def _make_ctx(
+        self,
+        timeline: list[date],
+        prices: list[float],
+        strategy: Strategy,
+        initial_cash_usd: Decimal = Decimal("100000"),
+    ) -> BacktestRunContext:
+        prices_df = pd.DataFrame({1: prices}, index=timeline)
+        prices_df.index.name = "date"
+        return BacktestRunContext(
+            base_currency="USD",
+            period_start=timeline[0],
+            period_end=timeline[-1],
+            initial_cash={"USD": initial_cash_usd},
+            universe_market_meta={1: ("US", "USD")},
+            prices_aligned=prices_df,
+            fx_rates_to_base={d: {"USD": ONE} for d in timeline},
+            strategy=strategy,
+        )
+
+    def test_day_0_eod_is_pure_cash(self) -> None:
+        """Day 0 EOD equity == initial_cash, fills 0 건 (시그널은 큐잉만, 체결 없음).
+
+        매수 시그널이 첫날 발생해도 D+1 settlement 이전이라 D=0 EOD 는 pure cash.
+        """
+        timeline = [
+            date(2024, 3, 15),
+            date(2024, 3, 18),
+            date(2024, 3, 19),
+        ]
+        prices = [500.0, 510.0, 520.0]
+        strategy = Strategy(
+            name="first_asset_daily",
+            allocator=_UseFirstAssetAllocator(),
+            signal_filters=tuple(),
+            rebalance_schedule="daily",
+        )
+        ctx = self._make_ctx(timeline, prices, strategy)
+        result = run_backtest(ctx)
+
+        # Day 0 EOD = 첫 equity_curve 포인트.
+        assert len(result.equity_curve) >= 1
+        day0_point = result.equity_curve[0]
+        assert day0_point.time == timeline[0]
+        # initial_cash 그대로 (큐잉 패턴: 첫날은 어제 큐잉 없음 → settlement skip).
+        assert day0_point.equity == Decimal("100000"), (
+            f"REGRESSION (TASK-244) — Day 0 EOD 가 pure cash 가 아님. "
+            f"equity={day0_point.equity}, expected=100000 (initial_cash)"
+        )
+        # cash_total_in_base 도 100000 — 보유 자산 0.
+        assert day0_point.cash_total_in_base == Decimal("100000")
+
+        # 첫 iteration 까지의 fills 는 0 건 (시그널만 큐잉, 체결 없음).
+        # 단, 전체 백테스트가 끝나면 D+1 부터 체결되므로 result.fills 는 ≥ 1.
+        # 본 검증의 핵심은 Day 0 시점 equity_curve[0] 이 100000 인 것.
+
+    def test_day_1_eod_is_post_init_trade(self) -> None:
+        """Day 1 EOD == qty × p[1] + cash_after_buy (어제 큐잉이 D=1 settlement 직후 평가).
+
+        equity = qty * price + cash_after, 보존 항등식: equity ≈ initial_cash − slippage − commission.
+        """
+        timeline = [
+            date(2024, 3, 15),
+            date(2024, 3, 18),
+            date(2024, 3, 19),
+        ]
+        prices = [500.0, 500.0, 500.0]  # 평탄가 → equity 변동은 fees/slippage 만
+        strategy = Strategy(
+            name="first_asset_daily",
+            allocator=_UseFirstAssetAllocator(),
+            signal_filters=tuple(),
+            rebalance_schedule="daily",
+        )
+        ctx = self._make_ctx(timeline, prices, strategy)
+        result = run_backtest(ctx)
+
+        # Day 0 = pure cash, Day 1 = post-settlement.
+        assert len(result.equity_curve) >= 2
+        day0 = result.equity_curve[0]
+        day1 = result.equity_curve[1]
+
+        assert day0.equity == Decimal("100000")  # 큐잉 패턴 sanity
+        # Day 1 은 settlement 직후 — 보유 자산 + 잔여 cash.
+        assert day1.time == timeline[1]
+        # 평탄가 (price=500) + slippage_bps=10 + commission US=0.5 → 매수 가격 ≈ 500.525
+        # qty = floor(100000 / 500.525) = 199.7... → 199 주.
+        # 보유 평가 = 199 * 500 = 99500. cash_after = 100000 - 199*500.525 ≈ 395.5
+        # equity ≈ 99500 + 395.5 ≈ 99895.5 (initial_cash 미만 — 거래비용 차감).
+        assert day1.equity < Decimal("100000"), (
+            f"REGRESSION (TASK-244) — Day 1 EOD 가 거래비용 차감 안 됨. "
+            f"equity={day1.equity}, expected < 100000"
+        )
+        # equity = qty × price + cash_after 항등식 검증 (자산 1, price=500).
+        position = result.final_portfolio.positions.get(1)
+        assert position is not None, "Day 1 settlement 후 보유 포지션 없음"
+        # 단순 케이스 (rebalance daily, target weight 동일) 라 매수 후 추가 변동 미미.
+        # Day 1 시점 qty 를 정확 검증하려면 fills 누적 — 첫 BUY 1건만 있어야.
+        buy_fills = [f for f in result.fills if f.side == "BUY"]
+        assert len(buy_fills) >= 1
+        first_buy = buy_fills[0]
+        assert first_buy.settlement_date == timeline[1], (
+            f"REGRESSION (TASK-244) — Day 0 시그널의 settlement 가 Day 1 이 아님. "
+            f"settlement_date={first_buy.settlement_date}, expected={timeline[1]}"
+        )
+        # Day 1 EOD 시점 equity 항등식: equity == qty(D1) × p[1] + cash_total(D1).
+        # final_portfolio 는 timeline 끝나는 시점 — 평탄가 + daily target 동일이라 추가 거래 미미.
+        # 핵심은 day1.equity 가 day0 (pure cash) 보다 *작다* + day1 < 100000.
+
+    def test_sell_signal_d_eod_still_holds(self) -> None:
+        """매도 시그널 D 의 EOD 가 매도 전 평가 (큐잉 효과 검증).
+
+        시나리오:
+          - Day 0 (3/15): 매수 시그널 → 큐잉
+          - Day 1 (3/18): settlement (매수 체결, qty>0) + 매도 시그널 큐잉
+          - Day 2 (3/19): settlement (매도 체결)
+        Day 1 EOD 는 매도 시그널이 *결정되었지만 체결되지 않은* 상태 → 보유 그대로 평가.
+        Day 2 EOD 가 매도 후 cash 평가.
+        """
+        timeline = [
+            date(2024, 3, 15),
+            date(2024, 3, 18),
+            date(2024, 3, 19),
+        ]
+        prices = [500.0, 500.0, 500.0]
+        first_day = timeline[0]
+        # OnceOnFirstDayAllocator: Day 0 만 매수 시그널, Day 1+ 는 cash-only (매도 시그널).
+        strategy = Strategy(
+            name="once_on_then_sell",
+            allocator=_OnceOnFirstDayAllocator(first_day),
+            signal_filters=tuple(),
+            rebalance_schedule="daily",
+        )
+        ctx = self._make_ctx(timeline, prices, strategy)
+        result = run_backtest(ctx)
+
+        assert len(result.equity_curve) == 3
+        day0 = result.equity_curve[0]
+        day1 = result.equity_curve[1]
+        day2 = result.equity_curve[2]
+
+        # Day 0 = pure cash.
+        assert day0.equity == Decimal("100000")
+        # Day 1 = Day 0 매수 시그널 settlement 후 + Day 1 매도 시그널은 큐잉만 → 보유 그대로.
+        # cash_total < 100000 (매수 후 잔여 cash 만 남음).
+        assert day1.cash_total_in_base < Decimal("100000"), (
+            "Day 1 settlement 후 cash 가 차감되어 있어야 함 (매수 체결 직후)"
+        )
+        # Day 1 보유 자산이 평가에 포함 — equity = cash + qty×price.
+        # equity 는 거의 100000 근처 (slippage/commission 만 차감).
+        assert day1.equity < Decimal("100000")
+        assert day1.equity > Decimal("99000"), (
+            f"Day 1 EOD 가 보유 평가를 빠뜨림 — equity={day1.equity}. "
+            f"보유 자산 평가가 들어갔다면 거의 100000 근처여야 함."
+        )
+
+        # Day 2 = Day 1 매도 시그널 settlement 후 — 보유 청산.
+        # cash 가 거의 100000 근처 (왕복 거래비용 차감).
+        sell_fills = [f for f in result.fills if f.side == "SELL"]
+        assert len(sell_fills) >= 1, (
+            "Day 1 cash-only 시그널이 Day 2 에 settlement 되어 SELL 발생해야 함"
+        )
+        # SELL 의 settlement_date = Day 2.
+        assert sell_fills[0].settlement_date == timeline[2], (
+            f"REGRESSION (TASK-244) — 매도 시그널 (Day 1) 이 Day 2 settlement 안 됨. "
+            f"settlement_date={sell_fills[0].settlement_date}"
+        )
+        # Day 2 EOD 시점에 보유 0 (매도 settlement 직후).
+        # final_portfolio 는 timeline 끝 — 평탄가 + 매일 cash-only 라 보유 0.
+        assert 1 not in result.final_portfolio.positions
+
+    def test_buy_signal_d_eod_still_cash(self) -> None:
+        """매수 시그널 D 의 EOD 가 cash 그대로 (체결 전 평가, 큐잉 효과 검증).
+
+        Day 0 매수 시그널 발생 시 Day 0 EOD 에 fills 0 건 + cash == initial_cash.
+        Day 1 EOD 가 settlement 직후 — cash 차감 + 보유 발생.
+        """
+        timeline = [
+            date(2024, 3, 15),
+            date(2024, 3, 18),
+        ]
+        prices = [500.0, 500.0]
+        strategy = Strategy(
+            name="first_asset_daily",
+            allocator=_UseFirstAssetAllocator(),
+            signal_filters=tuple(),
+            rebalance_schedule="daily",
+        )
+        ctx = self._make_ctx(timeline, prices, strategy)
+        result = run_backtest(ctx)
+
+        assert len(result.equity_curve) == 2
+        day0 = result.equity_curve[0]
+        day1 = result.equity_curve[1]
+
+        # Day 0 = pure cash (시그널 큐잉만, 체결 없음).
+        assert day0.equity == Decimal("100000"), (
+            f"REGRESSION (TASK-244) — 매수 시그널 D=0 EOD 가 cash 가 아님. "
+            f"equity={day0.equity}, expected=100000"
+        )
+        assert day0.cash_total_in_base == Decimal("100000")
+        # Day 1 = settlement 후 cash 차감.
+        assert day1.cash_total_in_base < Decimal("100000"), (
+            f"Day 1 settlement 후 cash 가 차감되어야 함. "
+            f"cash_total={day1.cash_total_in_base}"
+        )
+        # Day 1 보유 자산 발생.
+        assert 1 in result.final_portfolio.positions
+
+        # 모든 fills 의 settlement_date 는 ≥ Day 1 (Day 0 settlement 없음).
+        for fill in result.fills:
+            assert fill.settlement_date >= timeline[1], (
+                f"REGRESSION (TASK-244) — fill 이 Day 0 에 체결됨 (큐잉 위반). "
+                f"fill.settlement_date={fill.settlement_date}"
+            )

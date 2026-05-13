@@ -8,10 +8,14 @@ from app.models.backtest import BacktestEquity, BacktestMetric, BacktestRun, Bac
 from app.models.corporate_actions import CorporateAction
 from app.models.fx_rates import FxRate
 from app.models.ingestion_log import IngestionLog
+from app.models.market_cap import AssetMarketCap
 from app.models.ohlcv import Ohlcv
+from app.models.theme import AssetThemeHistory, Theme, ThemeAsset
 
 __all__ = [
     "Asset",
+    "AssetMarketCap",
+    "AssetThemeHistory",
     "BacktestEquity",
     "BacktestMetric",
     "BacktestRun",
@@ -20,4 +24,6 @@ __all__ = [
     "FxRate",
     "IngestionLog",
     "Ohlcv",
+    "Theme",
+    "ThemeAsset",
 ]
